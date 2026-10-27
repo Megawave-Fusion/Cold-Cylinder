@@ -1,0 +1,23 @@
+# Finder and Python caches.
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Local calculations and scratch data.
+/results/
+/tmp/
+
+# Rebuilt by make; keep the Tcl/Tk runtime and the standalone app.
+/工程文件/c_workbench/src/*.o
+/工程文件/c_workbench/src/rf_gui_script.h
+/工程文件/c_workbench/src/rf_gui_script.h.tmp
+/工程文件/c_workbench/.build-config
+/工程文件/c_workbench/.build-config.tmp
+/工程文件/c_workbench/rf-workbench
+/工程文件/c_workbench/rf-core-test
+/工程文件/c_workbench/rf-antenna-test
+/工程文件/c_workbench/rf-maxwell-test
+/工程文件/c_workbench/rf-spatial-test
+/工程文件/c_workbench/rf-full-test
+/工程文件/c_workbench/rf-gui-test
+/工程文件/c_workbench/rf-branches-test
