@@ -123,7 +123,7 @@ proc ::rf::category_tabs {parent labels} {
     set i 0
     foreach label $labels {
         ttk::radiobutton $parent.b$i -text $label -value $label -variable ::rf::selected_mode -command ::rf::select_mode -style FixedCategory.TRadiobutton
-        grid $parent.b$i -row 0 -column $i -sticky nsew -padx [list 0 [expr {$i<[llength $labels]-1 ? 2 : 0}]]
+        grid $parent.b$i -row 0 -column $i -sticky nsew -padx 1
         grid columnconfigure $parent $i -weight 1 -uniform categories
         incr i
     }
