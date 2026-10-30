@@ -1,2 +1,0 @@
-Tcl/Tk 8.6.18 (arm64), built from official tcltk/tcl and tcltk/tk core-8-6-18.
-Rebuild using make runtime; see tools/build_tk_macos.sh for pinned SHA-256 hashes.

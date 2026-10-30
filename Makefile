@@ -3,51 +3,45 @@
 # Delegated goals share generated headers and build configuration. Keep root
 # recipes sequential; the workbench sub-make still compiles with the requested -j.
 .NOTPARALLEL:
-.PHONY: all build app run gui check vacuum plasma spatial branches geometry test gui-test clean portable pdf
+.PHONY: all build app run gui check vacuum plasma spatial branches geometry clean portable pdf
 
 all build:
-	$(MAKE) -C 工程文件/c_workbench
+	$(MAKE) -C 工程文件
 
 app: all
-	$(MAKE) -C 工程文件/c_workbench app
-
-gui-test:
-	$(MAKE) -C 工程文件/c_workbench gui-test
+	$(MAKE) -C 工程文件 app
 
 run gui: all
-	./工程文件/c_workbench/rf-workbench --gui
+	./工程文件/.build/rf-workbench --gui
 
 check: all
-	./工程文件/c_workbench/rf-workbench --check
+	./工程文件/.build/rf-workbench --check
 
 vacuum: all
-	./工程文件/c_workbench/rf-workbench --vacuum $(ARGS)
+	./工程文件/.build/rf-workbench --vacuum $(ARGS)
 
 plasma: all
-	./工程文件/c_workbench/rf-workbench --plasma $(ARGS)
+	./工程文件/.build/rf-workbench --plasma $(ARGS)
 
 branches: all
-	./工程文件/c_workbench/rf-workbench --branches $(ARGS)
+	./工程文件/.build/rf-workbench --branches $(ARGS)
 
 spatial: all
-	./工程文件/c_workbench/rf-workbench --spatial $(ARGS)
+	./工程文件/.build/rf-workbench --spatial $(ARGS)
 
 geometry: all
-	./工程文件/c_workbench/rf-workbench --geometry $(ARGS)
-
-test:
-	$(MAKE) -C 工程文件/c_workbench test
+	./工程文件/.build/rf-workbench --geometry $(ARGS)
 
 portable:
-	$(MAKE) -C 工程文件/c_workbench
+	$(MAKE) -C 工程文件
 
+# 主LaTeX已内嵌图表与数据；交付版仅编译它，不依赖已移除的测试工具。
 pdf:
-	$(MAKE) -C 工程文件/c_workbench rf-antenna-test
-	mkdir -p tmp/pdfs/data tmp/pdfs/build
-	./工程文件/c_workbench/rf-antenna-test tmp/pdfs/data/antenna_checks.csv tmp/pdfs/data/double_saddle_geometry.csv tmp/pdfs/data/prescribed_current_geometry.csv tmp/pdfs/data/prescribed_current_spectra.csv
-	python3 工程文件/c_workbench/tools/generate_antenna_pdf_figures.py
+	mkdir -p tmp/pdfs/build
 	cd 天线电流谱文档 && latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=../tmp/pdfs/build Finite_width_antenna_current_spectra.tex
 	cp tmp/pdfs/build/Finite_width_antenna_current_spectra.pdf 天线电流谱文档/Finite_width_antenna_current_spectra.pdf
 
 clean:
-	$(MAKE) -C 工程文件/c_workbench clean
+	$(MAKE) -C 工程文件 clean
+	rm -rf tmp
+	rm -f .DS_Store 工程文件/.DS_Store

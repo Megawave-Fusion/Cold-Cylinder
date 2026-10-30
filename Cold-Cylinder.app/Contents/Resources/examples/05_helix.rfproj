@@ -1,0 +1,25 @@
+# Cylinder RF project v8; antenna numbering 1-17; current PDF reference parameters
+type=5
+elements=4
+current_direction=1
+winding_direction=-1
+global_phase_deg=0
+selected_m=1
+kz=10
+radial_cells=256
+radius=0.6
+length=1.6
+frequency_mhz=13.56
+current=1
+phase_step=90
+antenna_radius=0.44
+antenna_length=0.7
+width=0.18
+spacing=0.18
+turns=0.5
+azimuth_deg=90
+axial_offset=0
+arc_angle_deg=180
+return_radius=0.55
+band_width=0.04
+band_samples=1

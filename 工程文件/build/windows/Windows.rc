@@ -1,0 +1,28 @@
+// The GUI and CLI share branding, UTF-8 paths, UAC and DPI behavior.
+1 24 "Windows.manifest"
+
+1 VERSIONINFO
+FILEVERSION 1,4,0,24
+PRODUCTVERSION 1,4,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Cold-Cylinder\0"
+            VALUE "FileDescription", "Cold-Cylinder cold-plasma workbench\0"
+            VALUE "FileVersion", "1.4.0.24\0"
+            VALUE "ProductName", "Cold-Cylinder\0"
+            VALUE "ProductVersion", "1.4.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
