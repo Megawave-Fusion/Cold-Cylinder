@@ -1700,6 +1700,10 @@
 		<data>
 		dzEEdu8HnW5L/dYMa09qh1/90cw=
 		</data>
+		<key>Resources/examples/温度气压碰撞氩等离子体示例.rfproj</key>
+		<data>
+		jFAY4hkya3RPboR1zCM+LZp0PoA=
+		</data>
 		<key>Resources/examples/离子回旋快慢波识别示例.rfproj</key>
 		<data>
 		3xSLxiUPP1ZFk153Ecl9HGZ+P28=
@@ -4699,6 +4703,13 @@
 			<key>hash2</key>
 			<data>
 			VAQgjvLaeZGYpy8rE0cz4GzE9qs34opnDErA4vbtew4=
+			</data>
+		</dict>
+		<key>Resources/examples/温度气压碰撞氩等离子体示例.rfproj</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ultyX0Gm+ggGMOaEAAi7LY+gz/CQ4RTgkrhjUVne5bE=
 			</data>
 		</dict>
 		<key>Resources/examples/离子回旋快慢波识别示例.rfproj</key>

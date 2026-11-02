@@ -91,6 +91,16 @@ static const Field fields[] = {
     CF(ion_charge, "离子电荷数", 1, 1, 92),
     CF(profile, "密度分布", 1, 0, 2),
     CF(solve_mode, "材料响应", 1, 0, 2),
+    CF(collision_source, "碰撞率来源", 1, 0, 1),
+    CF(neutral_model, "中性气体模型", 1, 0, 1),
+    CF(coulomb_collisions, "电子离子摩擦", 1, 0, 1),
+    CF(neutral_pressure, "中性气压", 0, 0, 1e6),
+    CF(gas_temperature, "气体温度", 0, 1, 1e5),
+    CF(electron_temperature, "电子温度", 0, .001, 1e3),
+    CF(ion_temperature, "离子温度", 0, 1e-5, 100),
+    CF(neutral_mass_u, "中性粒子质量", 0, .1, 300),
+    CF(electron_neutral_cross_section, "电子动量截面", 0, 0, 1e-14),
+    CF(ion_neutral_cross_section, "离子动量截面", 0, 0, 1e-14),
     WF(plasma_enabled, "启用等离子体", 1, 0, 1),
     WF(kmin, "波数下限", 0, -2000, 2000),
     WF(kmax, "波数上限", 0, -2000, 2000),
@@ -185,7 +195,15 @@ static int apply_state(Tcl_Interp *ip, Tcl_Obj *dict)
         }
         if (f->integer)
             value = integer;
-        if (!isfinite(value) || value < f->min || value > f->max) {
+        int thermal_value = f->offset >= offsetof(WorkbenchProject, plasma) + offsetof(Plasma, neutral_pressure) &&
+            f->offset <= offsetof(WorkbenchProject, plasma) + offsetof(Plasma, ion_neutral_cross_section);
+        int active = !thermal_value || (next.plasma.solve_mode == RF_PLASMA_FINITE_COLLISION &&
+            next.plasma.collision_source == RF_COLLISION_THERMAL);
+        if (f->offset >= offsetof(WorkbenchProject, plasma) + offsetof(Plasma, neutral_mass_u) &&
+            f->offset <= offsetof(WorkbenchProject, plasma) + offsetof(Plasma, ion_neutral_cross_section) &&
+            next.plasma.neutral_model == RF_NEUTRAL_ARGON)
+            active = 0;
+        if (!isfinite(value) || (active && (value < f->min || value > f->max))) {
             snprintf(error, sizeof(error), "%s：范围应为 %.8g 至 %.8g。", f->label, f->min, f->max);
             return field_error(ip, f->key, error);
         }
@@ -747,6 +765,49 @@ static int preview_command(ClientData cd, Tcl_Interp *ip, int argc, Tcl_Obj *con
     Tcl_DecrRefCount(args[1]);
     return status;
 }
+
+/* 未提交表单的材料预览；每次都恢复项目，失败也不修改计算快照。
+ * 预览与全波场/射线共用同一个材料入口，不在Tcl中复制物理公式。 */
+static int collisions_command(ClientData cd, Tcl_Interp *ip, int argc, Tcl_Obj *const argv[])
+{
+    (void)cd;
+    if (argc != 2) {
+        Tcl_WrongNumArgs(ip, 1, argv, "参数字典");
+        return TCL_ERROR;
+    }
+    WorkbenchProject saved = rf_state;
+    if (apply_state(ip, argv[1]) != TCL_OK)
+        return TCL_ERROR;
+    WorkbenchProject current = rf_state;
+    rf_state = saved;
+    Tcl_Obj *result = Tcl_NewDictObj();
+    Tcl_IncrRefCount(result);
+    char error[256];
+    for (int j = 0; j < 2; ++j) {
+        RfPlasmaMaterial material;
+        double radius = j ? current.plasma.radius : 0.;
+        if (!rf_plasma_material(&current.project, &current.plasma, radius, &material, error, sizeof(error))) {
+            Tcl_DecrRefCount(result);
+            return failure(ip, error);
+        }
+        Tcl_Obj *rates = Tcl_NewDictObj();
+        num(ip, rates, "ne", material.ne);
+        num(ip, rates, "nn", material.collisions.neutral_density);
+        num(ip, rates, "nu_e", material.nu_e);
+        num(ip, rates, "nu_i", material.nu_i);
+        num(ip, rates, "nu_en", material.collisions.electron_neutral);
+        num(ip, rates, "nu_in", material.collisions.ion_neutral);
+        num(ip, rates, "nu_ei", material.collisions.electron_ion);
+        num(ip, rates, "nu_ie", material.collisions.ion_electron);
+        num(ip, rates, "ln_lambda", material.collisions.coulomb_log);
+        num(ip, rates, "K_en", material.collisions.electron_rate_coefficient);
+        num(ip, rates, "K_in", material.collisions.ion_rate_coefficient);
+        put(ip, result, j ? "edge" : "axis", rates);
+    }
+    Tcl_SetObjResult(ip, result);
+    Tcl_DecrRefCount(result);
+    return TCL_OK;
+}
 /* 按显式快照重新构造并导出真实中心线，不把屏幕投影坐标写入 OBJ。 */
 static int export_obj_command(ClientData cd, Tcl_Interp *ip, int argc, Tcl_Obj *const argv[])
 {
@@ -787,6 +848,7 @@ static int init_ui(Tcl_Interp *ip)
     Tcl_CreateObjCommand(ip, "rf_spatial", spatial_command, &spatial_job, spatial_delete);
     Tcl_CreateObjCommand(ip, "rf_full", full_command, &full_job, full_delete);
     Tcl_CreateObjCommand(ip, "rf_preview", preview_command, NULL, NULL);
+    Tcl_CreateObjCommand(ip, "rf_collisions", collisions_command, NULL, NULL);
     Tcl_CreateObjCommand(ip, "rf_render_model", render_model_command, NULL, NULL);
     Tcl_CreateObjCommand(ip, "rf_export_obj", export_obj_command, NULL, NULL);
     Tcl_DStringInit(&script);

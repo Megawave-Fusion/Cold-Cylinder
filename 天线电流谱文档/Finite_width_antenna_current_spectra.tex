@@ -67,7 +67,7 @@
 \newcommand{\bandfigure}[2]{\begin{minipage}[t]{.48\linewidth}\centering #1\par\smallskip\small #2\end{minipage}}
 \title{天线的电流谱和冷等离子体的耦合}
 \author{圆柱天线模型、物理推导与数值计算}
-\date{2026年10月30日}
+\date{2026年11月2日}
 \hypersetup{
  bookmarksdepth=3,
  pdftitle={天线的电流谱和冷等离子体的耦合},
@@ -15238,7 +15238,7 @@ $n_e(r),n_i(r)$ & m$^{-3}$ & 电子、单一离子种类的数密度；当前准
 $\nu_s(r)$ & s$^{-1}$ & 非负有效动量阻尼频率；可直接给定，也可由指定的碰撞模型和数据计算后输入。\\
 \bottomrule
 \end{longtable}
-冷流体闭合忽略射频压力梯度，背景温度可以非零。当前直接输入有效碰撞率 $\nu_s$，不另以温度或气压计算阻尼；温度不作为场求解的独立参数。
+冷流体闭合忽略射频压力梯度，背景温度可以非零。有限碰撞支持直接输入有效阻尼，或由温度与中性气压计算动量弛豫和种间摩擦；后者的完整推导见第~\ref{sec:thermalCollisions}~节。温度仅用于碰撞闭合。
 
 \subsection{平衡剖面与两个基本特征频率}
 程序以轴心电子密度 $n_0=n_e(0)\ge0$（m$^{-3}$）和无量纲密度剖面参数 $\eta$ 为输入，提供三种剖面。对非均匀剖面，$n_0>0$ 时 $\eta=n_e(a^-)/n_0$，其中 $a^-$ 表示从等离子体内侧趋近边界。抛物线取 $0\le\eta\le1$，Gaussian 取 $0<\eta\le1$；均匀剖面不使用 $\eta$。$\ln$ 和 $\exp$ 分别为自然对数和指数函数。在 $0\le r<a$ 内，
@@ -15265,7 +15265,7 @@ $\nu_s(r)$ & s$^{-1}$ & 非负有效动量阻尼频率；可直接给定，也�
 \textbf{模型近似。} 方程保留粒子惯性、沿磁场电场和位移电流，采用冷流体闭合。有限 Larmor 半径与 Landau 阻尼等动理学效应需使用相应的介电响应。
 
 \subsection{碰撞剖面与材料取值}\label{sec:functionplasma}
-有限碰撞模式以轴心率 $\nu_s(0)$ 和边缘比 $\eta_{\nu,s}$ 规定
+有限碰撞的直接输入来源以轴心率 $\nu_s(0)$ 和边缘比 $\eta_{\nu,s}$ 规定
 \begin{equation}
  \nu_s(r)=\nu_s(0)\left[1+(\eta_{\nu,s}-1)\frac{r^2}{a^2}\right],
  \qquad s\in\{e,i\},\quad 0\le r<a.
@@ -15328,11 +15328,168 @@ $S,D,P$ 均在所求半径 $r$ 和驱动角频率 $\omega$ 处取值，具体展
 \item 反转 $B_0$ 时，$S,P$ 不变而 $D$ 反号；因此旋向选择也相应改变。
 \item 当全部 $\nu_s=0$，且频率不处于奇异点时，$S,D,P$ 为实数，张量为厄米矩阵。此时材料响应无耗散。
 \end{itemize}
-式\eqref{eq:plasmamomentum}采用独立阻尼近似。严格动量守恒的种间摩擦会耦合各粒子速度，需由耦合运动方程重新求介电响应。
+式\eqref{eq:plasmamomentum}对应直接输入来源的独立背景阻尼。温度与气压来源使用下一节推导的守恒种间摩擦和耦合介电响应。
 
+
+
+\subsection{由温度与气压计算动量弛豫率及耦合响应}\label{sec:thermalCollisions}
+温度与气压方式仍求解线性冷流体波动问题。温度只用于给定平衡分布的碰撞闭合，不增加压强梯度、能量输运、Landau 阻尼或有限 Larmor 半径项。输入中性气体分压 $p_n$（Pa）、气体温度 $T_g$（K）、电子及离子温度 $T_e,T_i$（eV）；本文温度的 eV 数值满足 $\mathcal T_e=eT_e$、$\mathcal T_i=eT_i$，$\mathcal T_n=k_BT_g$，其中 $\mathcal T$ 为单位 J 的热能，$e>0$ 是基本电荷。本版这四个输入在等离子体区均匀；电子与离子密度仍按既有径向剖面取值。气压不是电子与离子的总压，也不用于替代给定的 $n_e(r)$。
+
+\paragraph{从中性密度与散射截面得到摩擦率}
+理想中性气体给出
+\begin{equation}\label{eq:thermalNeutralDensity}
+ n_n=\frac{p_n}{k_BT_g}\qquad[\mathrm{m^{-3}}].
+\end{equation}
+设带电粒子质量为 $M_s$，中性质量为 $M_n$，约化质量与相对速度热能为
+\begin{equation}\label{eq:thermalRelativeEnergy}
+ \mu_{sn}=\frac{M_sM_n}{M_s+M_n},\qquad
+ \Theta_{sn}=\mu_{sn}\left(\frac{\mathcal T_s}{M_s}+\frac{\mathcal T_n}{M_n}\right).
+\end{equation}
+$\mu_{sn}$ 单位 kg，$\Theta_{sn}$ 单位 J。两个各向同性 Maxwell 分布在零相对漂移下给出
+\begin{equation}
+ F_0(\mathbf g)=\left(\frac{\mu_{sn}}{2\pi\Theta_{sn}}\right)^{3/2}
+ \exp\left(-\frac{\mu_{sn}g^2}{2\Theta_{sn}}\right),\qquad
+ \int F_0\,\dd^3g=1.
+\end{equation}
+$\mathbf g$ 是相对速度（m/s）。角向动量转移截面定义为
+$\sigma_{sn}^{(m)}=\int(1-\cos\chi)(\dd\sigma/\dd\Omega)\dd\Omega$（m$^2$），$\chi$ 是质心系散射角。
+中性背景平均静止，带电粒子作小漂移 $\mathbf u_s$ 时，相对分布的一阶项为
+$F(\mathbf g)=F_0(\mathbf g)[1+\mu_{sn}\mathbf g\cdot\mathbf u_s/\Theta_{sn}]+O(u_s^2)$。
+单位体积的平均摩擦力由两体碰撞的动量变化得到
+\begin{equation}
+ \begin{aligned}
+ \mathbf R_{sn}
+ &=-n_sn_n\mu_{sn}\int g\,\sigma_{sn}^{(m)}(g)\mathbf g F(\mathbf g)\dd^3g\\
+ &=-\frac{n_sn_n\mu_{sn}^2}{3\Theta_{sn}}
+       \left\langle g^3\sigma_{sn}^{(m)}\right\rangle_0\mathbf u_s
+ =-M_sn_s\nu_{sn}\mathbf u_s.
+ \end{aligned}
+\end{equation}
+这里用各向同性恒等式 $\langle g_i g_j h(g)\rangle=\delta_{ij}\langle g^2h(g)\rangle/3$，平均下标 0 对应 $F_0$。
+令 $x=\mu_{sn}g^2/(2\Theta_{sn})$，得到实际使用的动量弛豫系数
+\begin{equation}\label{eq:thermalMomentumCoefficient}
+ \boxed{\begin{aligned}
+ \nu_{sn}&=n_nK_{sn}^{(m)},\\
+ K_{sn}^{(m)}&=\frac{\mu_{sn}}{M_s}\frac4{3\sqrt\pi}
+ \sqrt{\frac{2\Theta_{sn}}{\mu_{sn}}}
+ \int_0^\infty x^2e^{-x}\,
+ \sigma_{sn}^{(m)}\!\left(\varepsilon_{\mathrm{cm}}=\frac{\Theta_{sn}}e x\right)\dd x.
+ \end{aligned}}
+\end{equation}
+$K_{sn}^{(m)}$ 单位 m$^3$/s，$\nu_{sn}$ 单位 s$^{-1}$；截面的能量自变量以 eV 数值表示。这个小漂移动量平均与简单碰撞计数 $\langle\sigma g\rangle$ 不同。自定义常数截面 $\sigma_{sn,0}^{(m)}$ 时，利用 $\int_0^\infty x^2e^{-x}\dd x=2$，直接使用解析式
+\begin{equation}\label{eq:thermalConstantCrossSection}
+ K_{sn}^{(m)}=\frac43\frac{M_n}{M_s+M_n}\sigma_{sn,0}^{(m)}
+ \sqrt{\frac8\pi\left(\frac{\mathcal T_s}{M_s}+\frac{\mathcal T_n}{M_n}\right)}.
+\end{equation}
+电子同种碰撞和单离子同种碰撞守恒各自流体的总动量，不能把其热化频率直接相加为对静止背景的阻尼。
+
+\paragraph{内置氩模型与自定义截面}
+内置模型为 $\mathrm{Ar}$ 中性气体与 $\mathrm{Ar}^+$，$M_n=M_i=39.948\,\mathrm u$、$Z=1$。电子使用 Phelps--Petrovi\'c 弹性动量转移拟合\cite{phelps1999}。令 $E$ 为电子 LAB 能量的 eV 数值，并定义
+\begin{align}
+ A(E)&=\frac6{[1+E/0.1+(E/0.6)^2]^{3.3}},\\
+ B(E)&=\frac{1.1E^{1.4}}{[1+(E/15)^{1.2}]\sqrt{1+(E/5.5)^{2.5}+(E/60)^{4.1}}},\\
+ \sigma_{en}^{(m)}(E)&=10^{-20}\left[|A(E)-B(E)|+
+ \frac{0.05}{(1+E/10)^2}+\frac{0.01E^3}{1+(E/12)^6}\right]\ \mathrm{m^2}.
+ \label{eq:thermalArgonElectron}
+\end{align}
+电子与重中性的质量差很大，本拟合中的 LAB 能量取带电粒子相对中性的 $\mu_{en}g^2/(2e)$；忽略的有限靶质量修正为 $O(m_e/M_n)$。电子激发与电离的反应率未额外并入本弹性摩擦近似。
+
+离子总动量转移截面采用 Phelps 模型的拟合\cite{vrhovac2002}：
+\begin{equation}\label{eq:thermalArgonIon}
+ \sigma_{in}^{(m)}(\varepsilon_{\rm cm})=
+ 1.15\times10^{-18}E_{\rm lab}^{-0.1}
+ \left(1+\frac{0.015}{E_{\rm lab}}\right)^{0.6}\ \mathrm{m^2},
+ \qquad E_{\rm lab}=2\varepsilon_{\rm cm}.
+\end{equation}
+式中能量均用 eV 数值。这个因子 2 来自同质量靶粒子静止时 LAB 与 COM 的换算\cite{edupic2021}。总动量截面等于各向同性散射部分加两倍后向散射部分，已含对称电荷交换，不能再另加一次电荷交换贡献。程序对内置氩模型采用 $T_e=0.1$--$20$ eV、$T_i=0.001$--$10$ eV、$T_g=50$--$3000$ K 的输入窗口，并检查质量和电荷态；这些窗口是实现的使用范围。其他气体可选择自定义常数动量转移截面及中性质量，式\eqref{eq:thermalConstantCrossSection}给出相应近似；电离化学与非 Maxwell 分布需另给模型。
+
+\paragraph{电子--离子摩擦与动量守恒}
+可选择计入经典弱耦合 Maxwellian 电子--离子摩擦。采用电子热速度远大于离子热速度的重离子近似，
+\begin{equation}\label{eq:thermalCoulombRate}
+ \nu_{ei}=\frac{4\sqrt{2\pi}}3
+ \frac{n_eZ[e^2/(4\pi\epsilon_0)]^2\ln\Lambda}
+ {\sqrt{m_e}\,\mathcal T_e^{3/2}},\qquad
+ \nu_{ie}=\frac{m_en_e}{M_in_i}\nu_{ei}=\frac{Zm_e}{M_i}\nu_{ei}.
+\end{equation}
+$\nu_{ei}$、$\nu_{ie}$ 为两物种动量交换率；代码检查 $T_i/M_i\le0.01T_e/m_e$，以限制忽略离子热运动的误差。由 $n_i=n_e/Z$ 保证
+$m_en_e\nu_{ei}=M_in_i\nu_{ie}$。前式在 SI 密度、eV 温度下约为
+$\nu_{ei}=2.91\times10^{-12}n_eZ\ln\Lambda/T_e^{3/2}$ s$^{-1}$\cite{plasmapyCollisions}。
+本实现明确采用电子 Debye 截断与经典/量子下限：
+\begin{equation}\label{eq:thermalCoulombLog}
+ \begin{aligned}
+ v_{Te}&=\sqrt{2\mathcal T_e/m_e},&
+ \lambda_{De}&=\sqrt{\frac{\epsilon_0\mathcal T_e}{n_ee^2}},\\
+ b_{90}&=\frac{Ze^2}{4\pi\epsilon_0m_ev_{Te}^2},&
+ b_q&=\frac{\hbar}{2m_ev_{Te}},\qquad
+ \ln\Lambda=\ln\frac{\lambda_{De}}{\max(b_{90},b_q)}.
+ \end{aligned}
+\end{equation}
+$\lambda_{De},b_{90},b_q$ 单位 m，$\hbar$ 为约化 Planck 常数。代码要求 $\ln\Lambda\ge2$，作为此弱耦合近似的使用门限；不把无效的负对数钳成正值。关闭库仑选项或局部 $n_e=0$ 时，两项交换率为零。
+
+电子--离子摩擦必须依赖相对速度。对峰值射频相量，实际方程为
+\begin{align}
+ [\nu_{en}+\nu_{ei}-\ii\omega]\mathbf v_e
+ -\nu_{ei}\mathbf v_i-\Omega_e\mathbf v_e\times\mathbf e_z
+ &=\frac{-e}{m_e}\mathbf E,\\
+ [\nu_{in}+\nu_{ie}-\ii\omega]\mathbf v_i
+ -\nu_{ie}\mathbf v_e-\Omega_i\mathbf v_i\times\mathbf e_z
+ &=\frac{Ze}{M_i}\mathbf E.
+ \label{eq:thermalCoupledMomentum}
+\end{align}
+界面报告的对角率为 $\nu_e=\nu_{en}+\nu_{ei}$、$\nu_i=\nu_{in}+\nu_{ie}$。求场同时保留非对角摩擦项；把这两个总和直接代入独立阻尼公式会丢失反作用。
+
+\paragraph{圆极化求逆与介电张量}
+定义 $v_{s,\pm}=v_{s,r}\pm\ii v_{s,\phi}$、$E_\pm=E_r\pm\ii E_\phi$，纵向记号 $c=0$ 对应 $z$。令 $h_c=1,-1,0$ 分别对应 $+, -,0$，并定义
+\begin{equation}
+ a_{e,c}^{(n)}=\nu_{en}-\ii(\omega-h_c\Omega_e),\qquad
+ a_{i,c}^{(n)}=\nu_{in}-\ii(\omega-h_c\Omega_i).
+\end{equation}
+记 $b_e=-e/m_e$、$b_i=Ze/M_i$，各通道只需求解一个物种二元系统：
+\begin{equation}\label{eq:thermalCircularSystem}
+ \begin{pmatrix}a_{e,c}^{(n)}+\nu_{ei}&-\nu_{ei}\\
+ -\nu_{ie}&a_{i,c}^{(n)}+\nu_{ie}\end{pmatrix}
+ \begin{pmatrix}v_{e,c}\\v_{i,c}\end{pmatrix}
+ =\begin{pmatrix}b_e\\b_i\end{pmatrix}E_c.
+\end{equation}
+利用准中性与摩擦守恒，驱动分子中的库仑项恰好相消。用单位电场的速度响应 $u_{s,c}=v_{s,c}/E_c$，可写成数值上避免大数相消的形式
+\begin{equation}\label{eq:thermalMobilities}
+ \begin{aligned}
+ \Delta_c&=a_{e,c}^{(n)}a_{i,c}^{(n)}+\nu_{ei}a_{i,c}^{(n)}+\nu_{ie}a_{e,c}^{(n)},\\
+ u_{e,c}&=-\frac e{m_e}\frac{a_{i,c}^{(n)}}{\Delta_c},&
+ u_{i,c}&=\frac{Ze}{M_i}\frac{a_{e,c}^{(n)}}{\Delta_c},\\
+ \sigma_c&=-en_eu_{e,c}+Zen_iu_{i,c},&
+ \varepsilon_c&=1+\frac{\ii\sigma_c}{\omega\epsilon_0}.
+ \end{aligned}
+\end{equation}
+$u_{s,c}$ 单位为 (m/s)/(V/m)，$\sigma_c$ 为电导率（S/m），$\varepsilon_c$ 无量纲。由圆极化变回圆柱基，
+\begin{equation}\label{eq:thermalDielectric}
+ \boxed{S=\frac{\varepsilon_++\varepsilon_-}2,\qquad
+ D=\frac{\varepsilon_--\varepsilon_+}2,\qquad P=\varepsilon_{c=0}.}
+\end{equation}
+张量排列仍为式\eqref{eq:plasmacurrent}，因此现有 Maxwell 弱式、空间重构及局部色散求解均沿用同一接口。关闭电子--离子摩擦时，上式退化为使用 $\nu_{en},\nu_{in}$ 的独立阻尼响应；所有物理碰撞趋零时，在正则位置回到既有冷无损响应。
+
+\paragraph{吸收的独立正定表达式}
+分别将两物种运动方程点乘 $M_sn_s\mathbf v_s^*/2$，求和取实部。惯性与静磁场项不作平均功，电子--离子摩擦合并为相对速度的模平方，得到
+\begin{equation}\label{eq:thermalFrictionPower}
+ \boxed{q_{\rm abs}=\frac12\left[
+ m_en_e\nu_{en}|\mathbf v_e|^2+
+ M_in_i\nu_{in}|\mathbf v_i|^2+
+ m_en_e\nu_{ei}|\mathbf v_e-\mathbf v_i|^2\right]\ge0.}
+\end{equation}
+它等于 $\RePart(\mathbf J_{\rm pl}\cdot\mathbf E^*)/2$。实现中用
+$|\mathbf v_s|^2=(|v_{s,+}|^2+|v_{s,-}|^2)/2+|v_{s,z}|^2$，并对相对速度使用相同权重，避免重复计入交换耗散。对同一 $(m,k_z)$ 的谱场应用此二次型，其单位按 Fourier 场谱的约定变为 W/m。
+
+\paragraph{材料计算流程与极限处理}
+\path{src/collisions.c} 的 \path{rf_collision_rates} 先由 $p_n,T_g$ 求 $n_n$，再用式\eqref{eq:thermalMomentumCoefficient}计算并缓存均匀温度对应的 $K_{en}^{(m)},K_{in}^{(m)}$。
+
+Ar 积分以 $x=0,1/16,1/4,1/2,1,2,4,8,16,32,64$ 为分段端点。每段用 32 点 Gauss--Legendre 规则比较原区间与二分结果，按 $10^{-10}+10^{-8}|I|$ 递归验收；$I$ 的截面以 $10^{-18}$ m$^2$ 缩放，最大递归深度为 18。$e^{-64}$ 之后的尾部远小于使用的容差；自定义常数截面直接采用解析积分。
+
+每个径向材料取样再用当地 $n_e(r)$ 求库仑项，\path{rf_plasma_material} 计算三个圆极化二元系统并返回 $S,D,P$；吸收入口使用式\eqref{eq:thermalFrictionPower}。
+
+零碰撞极限不使用温度、气压、截面或库仑选项。构造内部正小量级时显式切回直接碰撞来源，再按第四章的原有正小量族、网格与求积验收求极限；正则端点与无碰撞参考分支也跳过温压模型。切换模式保留原输入，旧工程缺少新字段时确定地恢复为直接输入来源。
 
 \subsection{有限碰撞与零碰撞极限}\label{sec:materialResponseChoices}
-有限碰撞使用输入的 $\nu_e(r),\nu_i(r)$。零碰撞极限独立于这些输入，先求统一正小量族，再比较层外复场与积分吸收；序列、网格和求积验收集中见第~\ref{sec:limitingAlgorithm}~节。在材料与边值问题均正则时，厄米介电张量给出 $q_{\rm abs}=0$；内部简单共振层则可能保留有限积分吸收。
+有限碰撞可选择直接输入 $\nu_e(r),\nu_i(r)$，或由温度与气压确定各碰撞分项并求耦合响应。零碰撞极限独立于这些输入，先求统一正小量族，再比较层外复场与积分吸收；序列、网格和求积验收集中见第~\ref{sec:limitingAlgorithm}~节。在材料与边值问题均正则时，厄米介电张量给出 $q_{\rm abs}=0$；内部简单共振层则可能保留有限积分吸收。
 
 单模场和波数谱采用全波极限算法。空间相干重构使用正密度、至少一种碰撞率为正的有限碰撞场；其零碰撞推广需先在同一碰撞级完成全谱重构和积分，再联合取极限。“色散与射线”在正则位置使用解析无碰撞材料根，碰撞光学厚度为零，遇奇异层或 WKB 失效时停止。
 
@@ -15371,7 +15528,7 @@ $S,D,P$ 均在所求半径 $r$ 和驱动角频率 $\omega$ 处取值，具体展
 平衡只依赖 $r$ 时，$\boldsymbol\varepsilon_r$ 不混合不同的 $m,k_z$。将方位、轴向导数分别替换成 $\ii m,\ii k_z$，仍得到每个模式独立的径向问题；若背景依赖 $z$ 或 $\phi$，这一独立模式结构通常不再成立。
 
 \subsection{三个电场径向方程的最终展开形式}
-以下所有帽号量属于同一个 $(m,k_z)$，省略重复参数；撇号表示 $\dd/\dd r$，双撇号表示二阶径向导数。$\widehat E_r,\widehat E_\phi,\widehat E_z$ 的单位均为 V；$S,D,P$ 在每个半径处由式\eqref{eq:plasmaS}--\eqref{eq:plasmaP}给出。
+以下所有帽号量属于同一个 $(m,k_z)$，省略重复参数；撇号表示 $\dd/\dd r$，双撇号表示二阶径向导数。$\widehat E_r,\widehat E_\phi,\widehat E_z$ 的单位均为 V；直接输入来源的 $S,D,P$ 由式\eqref{eq:plasmaS}--\eqref{eq:plasmaP}给出，温压来源则采用式\eqref{eq:thermalDielectric}。
 
 第~\ref{sec:radialmaxwell}~节旋度展开仍然成立，只需把电场项替换为张量乘积：
 \begin{equation}
@@ -15579,6 +15736,7 @@ $q_{\mathrm{abs}}$ 为吸收功率密度，$\mathbf E,\mathbf J_{\mathrm{pl}}$ �
  &+2\ImPart D\,\ImPart(E_r^*E_\phi)\big].
 \end{aligned}}
 \end{equation}
+温压来源的 $S,D,P$ 取式\eqref{eq:thermalDielectric}，其独立正定功率核对采用式\eqref{eq:thermalFrictionPower}；本张量内积对两种碰撞来源均成立。
 式中 $|E_\nu|^2=E_\nu E_\nu^*$ 是该复电场分量的模平方。最后一项是横向分量耦合对吸收的贡献。无碰撞且无其他耗散时，正则冷模型的体吸收为零。
 
 \subsection{吸收谱、谱积分与径向沉积}
@@ -16279,12 +16437,12 @@ $\widehat\Phi$ 的单位为 V$\cdot$m，按相同中点权重重构为 V：
 \FloatBarrier
 
 \section{冷等离子体求解流程}\label{sec:plasmaCode}
-单谱入口为 \path{rf_plasma_solve}；它组织材料响应并调用共用 Maxwell 内核。空间重构和多模式叠加分别位于 \path{src/spatial.c}、\path{src/full_modes.c}，其计算关系见图~\ref{fig:plasmaFlow}、\ref{fig:reconstructionFlow}。
+单谱入口为 \path{rf_plasma_solve}；它组织材料响应并调用共用 Maxwell 内核。直接输入与温压来源均在同一径向材料接口完成；温压求积、耦合求逆及正定耗散见第~\ref{sec:thermalCollisions}~节。空间重构和多模式叠加分别位于 \path{src/spatial.c}、\path{src/full_modes.c}，其计算关系见图~\ref{fig:plasmaFlow}、\ref{fig:reconstructionFlow}。
 \begin{figure}[p]
 \centering
 \begin{tikzpicture}[node distance=3.5mm,>=Stealth]
 \node[flowbox] (input) {固定天线、频率与 $(m,k_z)$，选择材料响应};
-\node[flowhalf,below left=8mm and -5.1cm of input] (finite) {有限碰撞\\使用输入 $\nu_e(r),\nu_i(r)$};
+\node[flowhalf,below left=8mm and -5.1cm of input] (finite) {有限碰撞\\直接输入／温度气压};
 \node[flowhalf,below right=8mm and -5.1cm of input] (limit) {零碰撞极限的本级正小量\\外层序列见图~\ref{fig:resonanceFlow}};
 \node[flowbox,below=3cm of input] (material) {在真实求积点计算 $S,D,P$\\{\scriptsize\path{rf_plasma_material}}};
 \node[flowbox,below=of material] (fem) {界面对齐网格 $\longrightarrow$ 介电质量项与完整源加载\\{\scriptsize\path{rf_maxwell_solve_order}}};
@@ -17310,7 +17468,7 @@ $\mathbf A$ 是慢变复幅，单位为 V/m；$k_r,k_z$ 的单位均为 rad/m，
  \qquad \det\mathsf M=0.
  \label{eq:branchWaveMatrix}
 \end{equation}
-$\mathbf e$ 是无量纲极化向量，$\mathsf M$ 无量纲。$T$ 为普通转置，故 $\mathbf n\cdot\mathbf n=n_r^2+n_\phi^2+n_z^2$，各项按复数平方计算。相对介电张量与 $S,D,P$ 使用式\eqref{eq:plasmaS}--\eqref{eq:plasmaP}；密度和碰撞沿当前径向剖面取值，真空取 $S=P=1,D=0$。
+$\mathbf e$ 是无量纲极化向量，$\mathsf M$ 无量纲。$T$ 为普通转置，故 $\mathbf n\cdot\mathbf n=n_r^2+n_\phi^2+n_z^2$，各项按复数平方计算。直接输入的 $S,D,P$ 使用式\eqref{eq:plasmaS}--\eqref{eq:plasmaP}，温压来源使用式\eqref{eq:thermalDielectric}；材料均在当前半径求值，真空取 $S=P=1,D=0$。
 
 \subsection{横向波数二次方程与四个径向根}
 利用材料绕 $z$ 轴的旋转对称性，在局部将横向波矢转到第一坐标方向。定义
@@ -17713,7 +17871,7 @@ $D_\omega$ 中的 $\Omega_s$ 保留各物种的电荷符号。
 \end{equation}
 $0.1$ 为当前实现的弱损耗筛选阈值。无碰撞参考径向根须为可分辨的实传播根；实际衰减还须与参考径向能流方向相容。在参考根不可用、退化或强耗散时，仅保留实际复波数及可解的极化，不输出有效的实群速度或参考射线。
 
-有限碰撞模式使用输入碰撞剖面；极限模式在正则位置使用内部正小量族的解析材料极限求根和追踪。此时实际根与无碰撞参考根相同，传播段的碰撞光学厚度为零，倏逝根仍可具有非零虚部。局部射线不求奇异层穿越及其极限吸收，遇到失效条件仍停止；奇异层吸收由第三、四章的全波正小量序列处理。两种界面选项及各栏目的支持范围见第\ref{sec:materialResponseChoices}节。
+有限碰撞模式使用当前来源确定的材料响应：直接输入来源取给定碰撞剖面，温度与气压来源取式\eqref{eq:thermalDielectric}的耦合张量。极限模式在正则位置使用内部正小量族的解析材料极限求根和追踪。此时实际根与无碰撞参考根相同，传播段的碰撞光学厚度为零，倏逝根仍可具有非零虚部。局部射线不求奇异层穿越及其极限吸收，遇到失效条件仍停止；奇异层吸收由第三、四章的全波正小量序列处理。两种界面选项及各栏目的支持范围见第\ref{sec:materialResponseChoices}节。
 
 \subsection{径向 WKB 与圆柱曲率}
 一维径向程函的常见小参数为
@@ -17939,14 +18097,14 @@ $\chi_r$ 单位为 m$^{-1}$，$\alpha$ 也为 m$^{-1}$，$\tau$ 无量纲；$V$ 
 \end{equation}
 在正能量、被动介质的弱损耗分支上，$\gamma\ge0$。向内能流 $v_{g,r}<0$ 可以对应 $\chi_r<0$，乘积仍为正；把 $\chi_r$ 单独强制为正反而会使向内传播时功率增长。因子 2 来自功率对幅度的平方依赖。代码采用实际复根与无碰撞参考速度作此弱损耗解释，并检查方向相容性，不把这个一阶推导外推到强衰减区。
 
-\textbf{与材料做功及射线管输运的关系。} 在当前碰撞流体模型中，峰值相量的时间平均耗散可写为
+\textbf{与材料做功及射线管输运的关系。} 对直接输入的独立背景阻尼，峰值相量的时间平均耗散可写为
 \begin{equation}
  q_{\rm abs}=\sum_s\frac12 M_sn_s\nu_s|\mathbf v_s|^2
  =\frac{\omega\epsilon_0}{2}\mathbf E^\dagger\boldsymbol\varepsilon_A\mathbf E,
  \qquad
  \boldsymbol\varepsilon_A=\frac{\boldsymbol\varepsilon_r-\boldsymbol\varepsilon_r^\dagger}{2\ii}.
 \end{equation}
-对一个窄射线管，在截面近似均匀、无分支交换的条件下，Poynting 能流给出 $P\simeq W V\mathcal A$，其中 $\mathcal A$ 是垂直于群速度的截面积。段内损耗为 $q_{\rm abs}\mathcal A\dd s$，因而
+温压来源需将物种独立损耗之和换成式\eqref{eq:thermalFrictionPower}的守恒二次型，张量做功表达式仍成立。对一个窄射线管，在截面近似均匀、无分支交换的条件下，Poynting 能流给出 $P\simeq W V\mathcal A$，其中 $\mathcal A$ 是垂直于群速度的截面积。段内损耗为 $q_{\rm abs}\mathcal A\dd s$，因而
 \begin{equation}
  \alpha\simeq\frac{q_{\rm abs}}{WV},\qquad
  2\gamma\simeq q_{\rm abs}/W.
@@ -18087,6 +18245,10 @@ B 支的 $\RePart k_r>0$ 而 $v_{g,r}<0$，展示了相位向外、能量向内�
 \bibitem{segmented2014} S. Shinohara, T. Tanikawa and T. Motomura, \emph{A segmented multi-loop antenna for selective excitation of azimuthal mode number in a helicon plasma source}, Review of Scientific Instruments \textbf{85}, 093509 (2014). \href{https://doi.org/10.1063/1.4896041}{doi:10.1063/1.4896041}。
 \bibitem{birdcage2024} S. Vincent et al., \emph{A birdcage resonant antenna for helicon wave generation in TORPEX}, Review of Scientific Instruments \textbf{95}, 093505 (2024). \href{https://arxiv.org/abs/2404.05441}{作者预印本}。
 \bibitem{meander2006} H. Matsuno, S. Takamura, S. Hosoi and N. Ohno, \emph{Assessment of Meander-Line Antenna Covered with Dielectric Material for LHW Heating}, Plasma and Fusion Research \textbf{1}, 009 (2006). \href{https://doi.org/10.1585/pfr.1.009}{doi:10.1585/pfr.1.009}。
+\bibitem{phelps1999} A. V. Phelps and Z. Lj. Petrovi\'c, \emph{Cold-cathode discharges and breakdown in argon: surface and gas phase production of secondary electrons}, Plasma Sources Science and Technology \textbf{8}, R21--R44 (1999). 电子弹性动量截面拟合；\href{https://openresearch-repository.anu.edu.au/server/api/core/bitstreams/7239040d-b00d-46c3-b193-c8933178af93/content}{ANU 学位论文附录 B 的显式展开}。
+\bibitem{vrhovac2002} S. B. Vrhovac and Z. Lj. Petrovi\'c, \emph{Momentum-transfer theory of ion transport under the influence of resonant charge transfer collisions}, European Physical Journal D \textbf{21}, 335--342 (2002), 式 (3.1). \href{https://mail.ipb.ac.rs/~vrhovac/sloba/bib/d02189.pdf}{作者全文}。
+\bibitem{edupic2021} Z. Donk\'o et al., \emph{eduPIC: an introductory particle based code for radio-frequency plasma simulation}, Plasma Sources Science and Technology \textbf{30}, 095017 (2021), 第 3.2 节的 LAB/COM 能量和动量截面约定. \href{https://doi.org/10.1088/1361-6595/ac0b55}{doi:10.1088/1361-6595/ac0b55}。
+\bibitem{plasmapyCollisions} PlasmaPy, \emph{Fundamental electron collision frequency}: slowly flowing Maxwellian 电子的动量弛豫率及 Braginskii 平均约定. \href{https://docs.plasmapy.org/en/stable/api/plasmapy.formulary.collisions.frequencies.fundamental_electron_collision_freq.html}{项目公式与参考文献}，访问日期 2026-11-02。
 \end{thebibliography}
 
 \end{document}

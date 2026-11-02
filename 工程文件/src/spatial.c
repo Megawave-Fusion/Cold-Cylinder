@@ -107,8 +107,11 @@ static int spatial_begin(const Project *p,
         return 0;
     if (c->radius >= p->radius)
         return fail(e, n, "等离子体半径必须小于容器半径");
+    RfPlasmaMaterial damping;
+    if (!rf_plasma_material(p, c, 0., &damping, e, n))
+        return 0;
     if (c->solve_mode != RF_PLASMA_FINITE_COLLISION || c->density <= 0 ||
-        (c->electron_collision <= 0 && c->ion_collision <= 0))
+        (damping.nu_e <= 0 && damping.nu_i <= 0))
         return fail(e, n, "空间重建要求正密度、选择‘有限碰撞’且至少一种碰撞率为正；暂不支持逐波数零碰撞极限的相干重建");
     if (!isfinite(g->kmin) || !isfinite(g->kmax) || !isfinite(g->zmin) || !isfinite(g->zmax) ||
         g->kmin >= g->kmax || g->zmin >= g->zmax || g->kmin < -2000 || g->kmax > 2000 ||

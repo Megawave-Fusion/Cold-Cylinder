@@ -92,9 +92,11 @@ static int resonance_mesh(const Project *p, const Plasma *c, MeshBuilder *b, cha
     Plasma collisionless = *c;
     collisionless.solve_mode = RF_PLASMA_LOSSLESS_REFERENCE;
     RfPlasmaMaterial ma, mb;
-    int lossless = c->solve_mode == RF_PLASMA_LOSSLESS_REFERENCE ||
-                   (c->electron_collision == 0. && c->ion_collision == 0.);
+    RfPlasmaMaterial actual;
     char local_error[256];
+    if (!rf_plasma_material(p, c, .5 * c->radius, &actual, error, n))
+        return 0;
+    int lossless = actual.nu_e == 0. && actual.nu_i == 0.;
     if (!rf_plasma_material(p, &collisionless, 0, &ma, local_error, sizeof(local_error)) ||
         !rf_plasma_material(p, &collisionless, c->radius, &mb, local_error, sizeof(local_error))) {
         /* 有限碰撞的回旋响应可为有限数；这里只能跳过 S0 简单根预定位，

@@ -2,7 +2,7 @@
 
 这是用 **C11 + Tcl/Tk** 实现的天线与冷等离子体工作台。它从给定天线电流出发，计算圆柱几何中的电流谱、真空/等离子体全矢量场、吸收、有限模式范围的空间重建，以及局部色散分支和射线路径。两平台共用求解内核：Windows 使用 `Cold-Cylinder.exe`，macOS 使用 `Cold-Cylinder.app`；源码和构建入口位于 [`工程文件`](工程文件)。
 
-本 README 汇总原 `工程文件/docs/` 四份说明及 C11 工作台开发说明，统一维护操作、模型、公式、图表单位、验证和源码开发约定。[源码组织与开发约定](#development)及[代码核验记录](#code-audit)也在本文件中；完整理论推导见 [主 PDF](天线电流谱文档/Finite_width_antenna_current_spectra.pdf) 和 [主 LaTeX（源码包）](天线电流谱文档/Finite_width_antenna_current_spectra.tex)。运行包附本 README、对应平台程序及主 PDF；`工程文件/`、主 LaTeX 和构建脚本的路径/链接仅用于源码目录。整理日期：2026-10-30。
+本 README 汇总原 `工程文件/docs/` 四份说明及 C11 工作台开发说明，统一维护操作、模型、公式、图表单位、验证和源码开发约定。[源码组织与开发约定](#development)及[代码核验记录](#code-audit)也在本文件中；完整理论推导见 [主 PDF](天线电流谱文档/Finite_width_antenna_current_spectra.pdf) 和 [主 LaTeX（源码包）](天线电流谱文档/Finite_width_antenna_current_spectra.tex)。运行包附本 README、对应平台程序及主 PDF；`工程文件/`、主 LaTeX 和构建脚本的路径/链接仅用于源码目录。整理日期：2026-11-02。
 
 先区分四件事：天线电流是输入；等离子体响应电流是求解结果；单模场是固定 `(m,k_z)` 的谱量；空间总场由复振幅相干叠加得到。程序没有馈电端口、电路反馈或导体电流的自洽重分布。“全模式”始终指用户指定的有限 m、k_z 范围。
 
@@ -203,7 +203,7 @@ Windows 命令行从系统 Unicode 命令行转换为 UTF-8，项目和导出文
 ### 参数设置的基本顺序
 
 1. 选择天线并设置尺寸、给定电流、频率和选中的 m、k_z；先检查中间模型是否符合预期。
-2. 研究等离子体时设置半径、密度剖面、磁场、离子种类和材料响应。有限碰撞使用输入阻尼；零碰撞极限使用内部趋零序列。
+2. 研究等离子体时设置半径、密度剖面、磁场、离子种类和材料响应。有限碰撞可直接输入碰撞率，或由温度与气压计算；零碰撞极限使用内部趋零序列。
 3. 单模计算直接运行；波数谱设置 k_z 范围与点数；总场再设置 m 上下限、φ、z 窗口和显示点数；电势波形使用当前单 m。
 4. 射线另外设置发射位置、能流方向和步长/误差预算。先看分支状态与 WKB，再解释是否存在可发射轨迹。
 5. 比较结果时核对冻结快照，逐项加密径向网格、求积、k_z 和 m 范围；不要把仅改变显示倍率当成重新求解。
@@ -428,20 +428,18 @@ $$
 
 ### 方程与代码对应
 
-| PDF                         | 实现入口                                                                         | 作用                                    |
-| --------------------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
-| 第一章；(2.29)                  | `geometry.c: geometry_build / geometry_integrate_source`                     | 完整带宽源、回流和连接段，FEM 与展示谱共用同一源积分           |
-| (2.12)–(2.14)、(3.22)–(3.24) | `maxwell.c: assemble`                                                        | 直接离散矢量 curl-curl；冷等离子体保留 S、D、P 和非对角耦合 |
-| (2.33)–(2.41)               | `maxwell.c: basis`                                                           | 相容矢量基、轴心首单元正则幂次及解析旋度                  |
-| §2.3.4                      | `maxwell.c: solve_scaled_system`；`vacuum.c: rf_complex_band_solve`           | 对角平衡和部分选主元带状消元，保留填充，原矩阵与右端不被覆盖        |
-| §2.4.6                      | `maxwell.c: vacuum_pole`                                                     | 连续真空 TE/TM 极点及完整源的本征场投影               |
-| §3.1                        | `plasma.c: rf_plasma_material`                                               | 从物种动量方程得到介电张量                         |
-| (3.37)–(3.39)               | `maxwell.c: rf_maxwell_solve_order`                                          | 界面对齐、装配、源加载、约束、平衡缩放、求解及残差             |
-| §3.3                        | `rf_maxwell_evaluate / check_system / integrate_power / absorption_interval` | 从 FEM 场恢复 E/B，原系统残差、材料吸收积分与独立源功内积     |
-| §4.12                       | `plasma.c: resolve_collision_level / limiting_field`                         | 单个正碰撞级检查径向与单元求积，外层检查碰撞延拓              |
-| 图表与 CSV                     | `vacuum.c / plasma.c / rf_tk_gui.c`                                          | 取同一个 FEM 解，显示样本不回流到求解器                |
-
-PDF §2.6 和 §3.4 中旧的源文件名不是当前 C11 目录结构；上表给出实际入口。
+| PDF | 实现入口 | 作用 |
+| --- | --- | --- |
+| 第一章；§2.2 | `geometry.c: geometry_build / geometry_integrate_source` | 完整带宽源与真实半径加载 |
+| §2.1、§3.2 | `maxwell.c: assemble` | 矢量 curl-curl 与完整介电耦合 |
+| §2.3.1–§2.3.2 | `maxwell.c: basis` | 相容基与轴心正则性 |
+| §2.3.4–§2.3.5 | `maxwell.c: solve_scaled_system`；`vacuum.c: rf_complex_band_solve` | 装配、缩放与带状消元 |
+| §2.4.4 | `maxwell.c: vacuum_pole` | TE/TM 极点及源投影 |
+| §3.1.5–§3.1.6 | `collisions.c: rf_collision_rates`；`plasma.c: rf_plasma_material` | 直接输入／温压碰撞与介电响应 |
+| §3.2.5–§3.2.6 | `maxwell.c: rf_maxwell_solve_order` | 界面、组装、求解与残差 |
+| §3.3 | `rf_maxwell_evaluate / check_system / integrate_power / absorption_interval` | 复场、材料吸收与源功核对 |
+| §4.8 | `plasma.c: resolve_collision_level / limiting_field` | 单碰撞级离散检查及极限延拓 |
+| 图表与 CSV | `vacuum.c / plasma.c / rf_tk_gui.c` | 显示与导出使用同一物理解 |
 
 ### 相容有限元与边界条件
 
@@ -476,12 +474,12 @@ D = sum wp_s² Omega_s / [omega ((omega+i nu_s)²-Omega_s²)]
 P = 1 - sum wp_s² / [omega (omega+i nu_s)]
 ```
 
-电子与一个准中性离子种类采用独立有效阻尼；密度可均匀、抛物线或高斯。`r>a` 为真空，`r=a` 的材料值取内侧。反转 B0 时 D 反号，S/P 不变；B0=0 时 S=P、D=0；零密度恢复真空。材料响应电流为 `J_pl_hat=-i omega epsilon0 (epsilon_r-I) E_hat`。
+以上公式对应直接输入的独立有效阻尼。温度与气压来源使用下文的守恒电子—离子摩擦矩阵，仍返回相同排列的 S、D、P；密度可均匀、抛物线或高斯。`r>a` 为真空，`r=a` 的材料值取内侧。反转 B0 时 D 反号，S/P 不变；B0=0 时 S=P、D=0；零密度恢复真空。材料响应电流为 `J_pl_hat=-i omega epsilon0 (epsilon_r-I) E_hat`。
 
 界面的“材料响应”只提供以下两项：
 
-- **有限碰撞**（`solve_mode=0` / `--plasma-method finite`）：直接使用输入的电子、离子碰撞率及边缘比；为兼容已有设置也允许两种输入均为零，但此时普通求场仍拒绝内部 S0 共振。
-- **零碰撞极限**（`solve_mode=2` / `--plasma-method zero`）：不使用任何输入碰撞率或碰撞边缘比。内部采用均匀正小量 `nu_e=nu_i=eta*omega`，`eta=0.01*2^(-level)`，最多 18 级，保持实驱动频率、密度、磁场、源和边界不变。通过正小量序列求极限；存在内部简单混合共振时先检查 D0/P0 非退化并在层内加密，先积分吸收再取极限。
+- **有限碰撞**（`solve_mode=0` / `--plasma-method finite`）：来源可选“直接输入”或“温度与气压”；前者使用已有碰撞率与边缘比，后者按局部密度计算中性碰撞和可选库仑摩擦。无耗散时普通求场仍拒绝内部 S0 共振。
+- **零碰撞极限**（`solve_mode=2` / `--plasma-method zero`）：不使用输入碰撞率、边缘比、温度、气压、截面或库仑开关。内部采用均匀正小量 `nu_e=nu_i=eta*omega`，`eta=0.01*2^(-level)`，最多 18 级，保持实驱动频率、密度、磁场、源和边界不变。通过正小量序列求极限；存在内部简单混合共振时先检查 D0/P0 非退化并在层内加密，先积分吸收再取极限。
 
 旧工程或旧等离子体配置中的 `solve_mode=1` 载入时自动转为 2，保留原碰撞输入供切回有限碰撞时使用；保存时只写出 0 或 2。命令行兼容旧别名 `given`（等于 `finite`）以及 `limiting/collisionless/resonance` 和 `--plasma-resonance`（等于 `zero`）。内部解析无损参考标记继续供分支、射线和极限端点检查使用，不作为独立界面求场模式。
 
@@ -491,9 +489,72 @@ P = 1 - sum wp_s² / [omega (omega+i nu_s)]
 
 局部色散在远离材料极点的正则位置直接使用此正小量族的解析材料极限；零碰撞极限下的根、射线路径与输入碰撞参数无关，传播段的碰撞光学厚度为零。射线在奇异层及 WKB 失效处终止，不据此计算共振层穿越吸收；那一吸收仍由全波极限过程求得。
 
+### 有限碰撞的两种来源
+
+在左侧“介质 → 碰撞参数 → 有限碰撞 → 碰撞率来源”中切换。“介质”内部的“背景参数”页设置密度、磁场和离子种类，“碰撞参数”页设置材料响应和两种碰撞来源；保持原有字号与紧凑布局。**直接输入**保留原来的轴心电子／离子碰撞率和边缘比；**温度与气压**按输入物理条件计算动量弛豫系数，左侧显示轴心与边缘的对角总率，“碰撞明细”查看各分项与系数。切换时保留两套输入。
+
+| 项目字段（`plasma.` 前缀） | 默认值与单位 | 含义 |
+| --- | --- | --- |
+| `collision_source` | 0 | 0 直接输入；1 温度与气压 |
+| `neutral_model` | 0 | 0 内置 Ar/Ar⁺；1 自定义常数动量转移截面 |
+| `neutral_pressure` | 0.5 Pa | 运行时的中性气体分压，非带电粒子的总压 |
+| `gas_temperature` | 300 K | 中性温度 Tg |
+| `electron_temperature` | 3 eV | 电子热能 kBTe/e 的 eV 数值 |
+| `ion_temperature` | 0.03 eV | 离子热能 kBTi/e 的 eV 数值 |
+| `coulomb_collisions` | 1 | 1 计入、0 忽略电子—离子摩擦；温压模式中直接显示 |
+| `neutral_mass_u` | 39.948 u | 自定义模型的中性粒子质量 |
+| `electron_neutral_cross_section` | 4e-20 m² | 自定义电子动量转移截面 |
+| `ion_neutral_cross_section` | 1e-18 m² | 自定义离子总动量转移截面，若含电荷交换不再另加 |
+
+本版温度、气压在等离子体内均匀；中性密度 `nn=p/(kB*Tg)`。电子密度仍使用既有径向剖面，离子密度 `ni=ne/Z`。气压不反推出电离度或电子密度。普通气体的填充前压强不能自动替代放电运行时的中性分压。
+
+碰撞率使用小漂移 Maxwell 分布的动量矩平均。设 `mu=ms*mn/(ms+mn)`、`Theta=mu*(kTs/ms+kTg/mn)`，则
+
+$$
+K_{sn}^{(m)}=\frac{\mu}{m_s}\frac4{3\sqrt\pi}\sqrt{\frac{2\Theta}{\mu}}
+\int_0^\infty x^2e^{-x}\sigma_{sn}^{(m)}(\Theta x/e)\,dx,
+\qquad \nu_{sn}=n_n K_{sn}^{(m)}.
+$$
+
+这与单纯的碰撞计数平均 `<sigma*v>` 不同。常数截面时直接使用解析式 `K=(4/3)*mn/(ms+mn)*sigma*sqrt((8/pi)*(kTs/ms+kTg/mn))`。内置氩使用 Phelps–Petrović 电子弹性动量转移拟合，以及 Phelps 的 Ar⁺–Ar 总动量截面。离子拟合输入是 LAB 能量，积分使用 COM 能量，程序明确换算 `E_lab=2 E_cm`；该总动量截面已包含对称电荷交换。电子激发、电离、非 Maxwell 分布及异常输运未作为额外阻尼加入。
+
+内置模型要求 `ion_mass_u=39.948`、`ion_charge=1`，使用窗口 Te=0.1–20 eV、Ti=0.001–10 eV、Tg=50–3000 K；程序拒绝把它用于其他离子。其他气体可选择自定义截面及中性质量，并按实际离子设置质量和电荷数。自定义常数截面是明确的近似，不是任意气体的内置数据库。
+
+可选库仑项采用弱耦合 Maxwellian 电子的 Braginskii 动量弛豫率，`nu_ei≈2.91e-12*ne[m^-3]*Z*lnLambda/Te[eV]^(3/2)`；`nu_ie=me*ne/(mi*ni)*nu_ei`。对数用 `ln(lambda_De/max(b90,bq))`、`vTe=sqrt(2eTe/me)`、`b90=Ze²/(4pi epsilon0 me vTe²)`、`bq=hbar/(2me vTe)`，要求 lnLambda≥2，且 Ti/mi≤0.01 Te/me 以满足电子热速度占优；不钳成正数。关闭该项或局部密度为零时，ei/ie 均为零。
+
+报告的 `nu_e=nu_en+nu_ei`、`nu_i=nu_in+nu_ie` 是摩擦矩阵的对角率。求解同时包含 `-nu_ei*v_i` 和 `-nu_ie*v_e`，满足 `me*ne*nu_ei=mi*ni*nu_ie`。三种圆极化／纵向通道分别解二元物种系统，再合成为 S、D、P。吸收用正定式 `q=0.5*(me ne nu_en |ve|²+mi ni nu_in |vi|²+me ne nu_ei |ve-vi|²)`，与 `Re(J·E*)/2` 独立核对，不把两个对角总率当作独立背景耗散重复计算。同种粒子热化频率不添加为总流动阻尼。
+
+温度只用于碰撞闭合，波动求解仍为冷流体，没有新增温度输运、热压梯度、Landau 阻尼或有限回旋半径。零碰撞极限在构造数值正小量族时显式使用直接碰撞来源，忽略整套温压输入；旧工程缺少新增字段时仍按直接输入载入。
+
+可打开 `工程文件/examples/温度气压碰撞氩等离子体示例.rfproj`，或先检查碰撞率再求场：
+
+```sh
+工程文件/.build/rf-workbench --collision-info --project 工程文件/examples/温度气压碰撞氩等离子体示例.rfproj --output results/collision_rates.csv
+make plasma ARGS="--project 工程文件/examples/温度气压碰撞氩等离子体示例.rfproj --output results/thermal_field.csv"
+```
+
+输出目录需已存在。`--collision-info` 不解波场；无 `--output` 时打印轴心、边缘，有输出时导出 33 个径向点，包含 nn、en/ei/in/ie、对角总率、lnLambda、两个速率系数与模式字段。直接输入模式中的 en/in 列表示原有独立背景阻尼，不能解释成自动识别了实际中性碰撞来源。界面明细、CLI、全波场、空间重构与局部色散均使用同一材料入口。
+
+物理出处：[Phelps–Petrović 电子拟合的显式展开（ANU，附录 B）](https://openresearch-repository.anu.edu.au/server/api/core/bitstreams/7239040d-b00d-46c3-b193-c8933178af93/content)、[Vrhovac–Petrović 离子动量截面，式 (3.1)](https://mail.ipb.ac.rs/~vrhovac/sloba/bib/d02189.pdf)、[eduPIC 的 LAB/COM 与电荷交换约定](https://doi.org/10.1088/1361-6595/ac0b55)、[PlasmaPy 的 Maxwellian 电子—离子动量弛豫率](https://docs.plasmapy.org/en/stable/api/plasmapy.formulary.collisions.frequencies.fundamental_electron_collision_freq.html)。完整推导集中在主 PDF 第 3.1.6 节。
+
+### 2026-11-02 温压碰撞更新与交付核验
+
+- 64 组材料点覆盖正反磁场、无磁场、四个射频频率、纯库仑、纯中性和不同离子／中性质量；最终复核还覆盖自定义 Z=2 单离子。与独立 Cartesian 六维运动方程求得的介电张量相对差小于 1e-14，正定摩擦功率与 J·E* 相对差小于 1e-12。
+- 48 组温度组合覆盖内置 Ar 使用窗口端点；独立采用 u=sqrt(x) 变换和 128 点 Gauss 积分，动量系数最大相对差约 1.9e-9。自定义常数截面的结果与解析动量积分一致。
+- 原直接输入算例、原零碰撞共振算例的场 CSV 与更新前二进制逐字节一致；零碰撞验证还将未参与计算的温压参数改为无效值，结果仍一致。旧示例全部可载入，新增字段保存／再打开通过。
+- 新温压全波算例的功率平衡误差小于 1e-12；将未使用的手动碰撞输入均设为零后，温压空间重构仍能正常完成。局部分支使用同一新材料接口，射线资格继续受弱损耗和 WKB 条件约束。
+- GUI 核查覆盖来源切换、Ar 物种同步、自定义截面、碰撞明细预览不修改快照、零碰撞时温压禁用且离子种类仍可编辑、参数保存载入。左侧“介质”内的“背景参数／碰撞参数”内页保留既有字体；在 1600×820 窗口中自定义完整表单不超出可用高度。
+- Windows x64 使用现有 PowerShell 构建脚本重新编译；Wine 中温压碰撞率导出、全波求解与 GUI 启动／正常关闭通过。Windows 真机仍不计入本轮已验证范围。
+- 完整重编译无编译警告；14 个 C 翻译单元经过 Clang 静态分析。修复保存失败后成功关闭文件可能覆盖 errno 的问题，注入写入失败／关闭失败分别验证错误码与原工程均保留。
+- ASan/UBSan 下验证 27 个示例的载入与几何、17 类天线各自的真空／等离子体场，以及有限碰撞、零碰撞共振、源谱／场扫描和代表性分支／射线导出；未发现地址或未定义行为错误。独立已知解核对稠密／带状线性求解，三 m 相干总场与逐模复数叠加、J·E* 吸收及独立方位积分核对通过。此处仍不作为内存泄漏检测结论。
+- 原生 Tk 完整工作流完成七个栏目、38 张图的计算与绘制，并检查横轴刻度与轴说明的边界框无重叠；温压自定义完整表单在 1600×820 窗口内可见。
+- 主 PDF 共 104 页，检查全部页面渲染与重点公式页面；编译无未定义引用、内容溢出或缺字。更新前的公式块与引用标签全部保留，17 类天线及核心流程图保留。
+
+核验驱动与运行时临时文件不随交付保留；程序运行不依赖 Python、Wine 或此处的核验工具。
+
 ### 功率和质量检查
 
-材料吸收使用独立物种速度耗散的非负公式。源供功由 FEM 复源内积得到：`dP_src/dkz=-Im(sum conj(u_a) f_a)/(2 omega mu0)`。两者独立计算。无损时供功虚实相消的舍入误差按复功率自然尺度归一，有可分辨吸收时按有功尺度归一；源供功不被吸收值覆盖。
+直接输入使用独立物种速度耗散的非负公式；温压模式使用上述守恒摩擦二次型。源供功由 FEM 复源内积得到：`dP_src/dkz=-Im(sum conj(u_a) f_a)/(2 omega mu0)`。两者独立计算。无损时供功虚实相消的舍入误差按复功率自然尺度归一，有可分辨吸收时按有功尺度归一；源供功不被吸收值覆盖。
 
 `rf_physics.h` 统一 c0、epsilon0、mu0 并保持 `c0² mu0 epsilon0=1`，避免不同常量来源导致固定能量偏差。吸收总量使用内部单元积分，不由显示网格梯形积分替代，也不额外多乘 2π；内部累计数据保留供求解和核验使用，界面不恢复累计吸收图。
 
@@ -1224,7 +1285,8 @@ make clean           # 删除 .build 编译产物和 tmp，保留依赖缓存
 | `ui/rf_gui_spatial.h` | 当前电势波形栏目的电势专用分步任务与复电势导出 |
 | `src/full_modes.c`、`src/full_modes.h`、`ui/rf_gui_full.h` | 多 m 相干场重建、全圆周壳层沉积、全模式 r-z 图与分量切换 |
 | `src/branches.c`、`src/branches.h` | 固定 f,m,kz 局部分支与指定起点的自适应 Hamilton 射线，独立采样和 CSV |
-| `src/plasma.c` | 冷流体材料张量、响应电流、功率与正碰撞延拓 |
+| `src/collisions.c`、`src/collisions.h` | 温压动量积分、氩截面与自定义截面、局部库仑摩擦率 |
+| `src/plasma.c` | 冷流体材料张量、两物种耦合响应、正定摩擦功率与正碰撞延拓 |
 | `src/main.c`、`src/plot.c` | CLI、Windows Unicode 参数转换、CSV/SVG 导出 |
 | `ui/rf_tk_gui.c`、`ui/rf_gui_fields.h` | Tcl 参数桥接、计算缓存及派生图示数据 |
 | `ui/rf_gui.tcl`、`ui/rf_gui_views.tcl` | 三栏界面、扫描/空间任务调度及图表 |

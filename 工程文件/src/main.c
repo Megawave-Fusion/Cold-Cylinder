@@ -239,7 +239,7 @@ static int geometry_command(const WorkbenchProject *w, const char *obj)
 /* 命令行解析只产生选项；载入、覆盖校验和各计算命令分别执行。 */
 typedef struct {
     int check, gui, do_vacuum, do_scan, do_plasma, do_geometry;
-    int fields, save_default, help, do_spatial, do_branches;
+    int fields, save_default, help, do_spatial, do_branches, do_collisions;
     const char *project_path, *plasma_path, *output, *obj, *save_path, *spectrum, *rays;
     double kmin, kmax, density, magnetic_field, frequency, kz, zmin, zmax;
     int nk, radial_cells, m_override, solve_mode, nz, nr;
@@ -280,6 +280,8 @@ static int parse_arguments(int argc, char **argv, CliOptions *options)
             options->check = 1;
         else if (!strcmp(argv[i], "--gui"))
             options->gui = 1;
+        else if (!strcmp(argv[i], "--collision-info"))
+            options->do_collisions = options->do_plasma = 1;
         else if (!strcmp(argv[i], "--vacuum") || !strcmp(argv[i], "--run"))
             options->do_vacuum = 1;
         else if (!strcmp(argv[i], "--spatial") || !strcmp(argv[i], "--impedance")) {
@@ -427,7 +429,7 @@ static int parse_arguments(int argc, char **argv, CliOptions *options)
                  "[--output CSV] | --scan [--kmin K0 --kmax K1 --kpoints N] | --plasma [--project "
                  "PATH] [--density N --field B --frequency MHz --m M --kz K] [--plasma-method "
                  "finite|zero] [--output CSV] | --geometry --obj PATH | "
-                 "--save-default PATH | --spatial (or --impedance) [--kmin K0 --kmax K1 --nk N] "
+                 "--save-default PATH | --collision-info [--project PATH] [--output rates.csv] | --spatial (or --impedance) [--kmin K0 --kmax K1 --nk N] "
                  "[--zmin Z0 --zmax Z1 --zpoints NZ --rpoints NR] [--output MAP.csv] [--spectrum "
                  "Z.csv] | --branches [--frequency MHz --m M --kz K] [--output branches.csv] "
                  "[--rays rays.csv] [--ray-r R --ray-z Z --ray-phi DEG] [--ray-direction both|inward|outward] [--ray-tol T --ray-step M --ray-length M --ray-max-steps N]");
@@ -519,6 +521,45 @@ static int svg_path(const char *path)
 {
     size_t length = strlen(path);
     return length >= 4 && !strcmp(path + length - 4, ".svg");
+}
+
+/* 无需解波场即可检查实际使用的径向碰撞率；默认打印轴心和边缘，CSV取33点。
+ * 单位和分项明确保留，避免把ei/ie对角率误解为独立背景损耗。 */
+static int collisions_command(const WorkbenchProject *w, const char *output)
+{
+    char error[256];
+    RfPlasmaMaterial material[33];
+    int count = output ? 33 : 2;
+    if (output && svg_path(output)) {
+        fputs("碰撞率诊断使用CSV格式。\n", stderr);
+        return 2;
+    }
+    /* 先算完再打开目标，物理失败不能覆盖用户已有输出。 */
+    for (int j = 0; j < count; ++j)
+        if (!rf_plasma_material(&w->project, &w->plasma,
+                w->plasma.radius * j / (count - 1.), &material[j], error, sizeof(error))) {
+            fprintf(stderr, "碰撞率计算失败: %s\n", error);
+            return 1;
+        }
+    FILE *file = output ? rf_fopen_utf8(output, "wb") : stdout;
+    if (!file) {
+        fputs("无法写入碰撞率CSV。\n", stderr);
+        return 1;
+    }
+    fputs("r_m,ne_m3,nn_m3,nu_en_s1,nu_ei_s1,nu_in_s1,nu_ie_s1,nu_e_total_s1,nu_i_total_s1,lnLambda,K_en_m3_s,K_in_m3_s,collision_source,solve_mode\n", file);
+    for (int j = 0; j < count; ++j) {
+        const RfPlasmaMaterial *m = &material[j];
+        const RfCollisionRates *c = &m->collisions;
+        fprintf(file, "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%d,%d\n",
+            w->plasma.radius * j / (count - 1.), m->ne, c->neutral_density,
+            c->electron_neutral, c->electron_ion, c->ion_neutral, c->ion_electron,
+            m->nu_e, m->nu_i, c->coulomb_log, c->electron_rate_coefficient, c->ion_rate_coefficient,
+            w->plasma.collision_source, w->plasma.solve_mode);
+    }
+    int failed = ferror(file);
+    if (output && fclose(file))
+        failed = 1;
+    return failed;
 }
 
 /* 固定f/m/kz运行局部分支与显式起点射线，分别导出径向表和沿程表。 */
@@ -721,6 +762,8 @@ static int run_command(int argc, char **argv)
         return check_command(&w);
     if (options.do_geometry)
         return geometry_command(&w, options.obj);
+    if (options.do_collisions)
+        return collisions_command(&w, options.output);
     if (options.do_branches)
         return branches_command(&w, &options);
     if (options.do_spatial)

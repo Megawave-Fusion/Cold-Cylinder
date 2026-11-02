@@ -39,8 +39,11 @@ enum rf_antenna_type {
 
 enum rf_plasma_profile { RF_PLASMA_UNIFORM = 0, RF_PLASMA_PARABOLIC = 1, RF_PLASMA_GAUSSIAN = 2 };
 
+enum rf_collision_source { RF_COLLISION_DIRECT = 0, RF_COLLISION_THERMAL = 1 };
+enum rf_neutral_model { RF_NEUTRAL_ARGON = 0, RF_NEUTRAL_CUSTOM = 1 };
+
 enum rf_plasma_solve_mode {
-    RF_PLASMA_FINITE_COLLISION = 0,  /* 有限碰撞：使用输入碰撞剖面 */
+    RF_PLASMA_FINITE_COLLISION = 0,  /* 有限碰撞：直接输入或温度/气压模型 */
     RF_PLASMA_LOSSLESS_REFERENCE = 1, /* 内部解析无损参考，不作为界面求场模式 */
     RF_PLASMA_ZERO_COLLISION_LIMIT = 2 /* 自动正小量趋零，忽略输入碰撞参数 */
 };
@@ -90,6 +93,16 @@ typedef struct Plasma {
     int ion_charge;            /* 正整数电荷数Z；电子电荷的负号在材料函数中保留 */
     int profile;               /* 均匀、抛物线或Gaussian密度剖面枚举 */
     int solve_mode;            /* 有限碰撞/内部无损参考/零碰撞极限枚举 */
+    int collision_source;      /* 0: 直接输入；1: Maxwellian 小漂移动量弛豫模型 */
+    int neutral_model;         /* 0: Ar/Ar+ 文献截面；1: 自定义常数动量转移截面 */
+    int coulomb_collisions;    /* 温压模式中是否计入守恒的电子-离子摩擦，0/1 */
+    double neutral_pressure;  /* 中性气体分压[Pa]，非等离子体总压；本版径向均匀 */
+    double gas_temperature;    /* 中性气体温度[K]，本版径向均匀 */
+    double electron_temperature; /* Te[eV]，数值表示kB*Te/e；只用于碰撞闭合 */
+    double ion_temperature;   /* Ti[eV]，本版径向均匀 */
+    double neutral_mass_u;     /* 自定义模型的中性粒子质量[u] */
+    double electron_neutral_cross_section; /* 自定义COM动量转移截面[m^2] */
+    double ion_neutral_cross_section;      /* 自定义总动量转移截面[m^2]，含CX时不再另加 */
 } Plasma;
 
 typedef struct Options {

@@ -11,5 +11,7 @@
 #define RF_E_CHARGE 1.602176634e-19 /* 基本电荷的正值[C]，物种电荷另含符号 */
 #define RF_ME 9.1093837015e-31      /* 电子质量[kg] */
 #define RF_AMU 1.66053906660e-27    /* 本模型固定的原子质量单位[kg] */
+#define RF_KB 1.380649e-23          /* Boltzmann常数[J/K]，精确定义值 */
+#define RF_HBAR 1.0545718176461565e-34 /* 约化Planck常数[J s] */
 
 #endif

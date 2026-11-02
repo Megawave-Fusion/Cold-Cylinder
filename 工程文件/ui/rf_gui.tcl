@@ -28,6 +28,9 @@ namespace eval ::rf {
     variable model_view_height_m 5.0
     variable model {}
     variable model_job {}
+    variable collision_job {}
+    variable collision_summary {}
+    variable collision_detail {}
     variable model_info {}
     variable model_status {正在生成天线模型…}
     variable model_type {}
@@ -54,6 +57,15 @@ proc ::rf::update_title {} {
 # 仅用户编辑递增版本；载入/格式化期间关闭跟踪，防止把程序回填误认为新参数。
 proc ::rf::edited {args} {
     if {$::rf::loading} {return}
+    # 内置Ar模型的质量/电荷态由气体选择确定；仅在用户切换来源/模型时同步。
+    # 载入工程仍由C校验，不能静默修正文件中的不一致参数。
+    if {[lindex $args 1] in {plasma.solve_mode plasma.collision_source plasma.neutral_model} && $::rf::cfg(plasma.solve_mode)==0 &&
+        $::rf::cfg(plasma.collision_source)==1 && $::rf::cfg(plasma.neutral_model)==0} {
+        set ::rf::loading 1
+        set ::rf::cfg(plasma.ion_mass_u) 39.948
+        set ::rf::cfg(plasma.ion_charge) 1
+        set ::rf::loading 0
+    }
     set ::rf::dirty 1
     incr ::rf::revision
     update_title
@@ -109,8 +121,13 @@ proc ::rf::apply {} {
                 if {$key in {plasma.electron_collision_edge_ratio plasma.ion_collision_edge_ratio}} {set ::rf::advanced(medium) 1}
                 update_controls
                 set w $::rf::widgets($key)
-                set page [winfo parent [winfo parent [winfo parent $w]]]
-                if {[winfo exists $page]} {.body.side.tabs select $page}
+                # 沿父链选择内外Notebook，支持“介质”内的背景/碰撞参数页。
+                set pane $w
+                while {$pane ne {.}} {
+                    set parent [winfo parent $pane]
+                    if {[winfo class $parent] eq {TNotebook}} {$parent select $pane}
+                    set pane $parent
+                }
                 focus $w
                 catch {$w selection range 0 end}
                 # Scroll the invalid field into view, including advanced fields.
@@ -171,15 +188,16 @@ proc ::rf::close {} {
     if {![may_discard]} {return}
     if {$::rf::job ne {}} {after cancel $::rf::job}
     if {$::rf::model_job ne {}} {after cancel $::rf::model_job}
+    if {$::rf::collision_job ne {}} {after cancel $::rf::collision_job}
     destroy .
 }
 
 # Form pages move only through their scrollbars. Real widgets retain keyboard navigation.
 # 每个参数页独立保存滚动范围；画布承载原生控件而不是绘制不可编辑的假输入框。
-proc ::rf::page {key title} {
-    set p .body.side.tabs.$key
+proc ::rf::page {key title {notebook .body.side.tabs}} {
+    set p $notebook.$key
     ttk::frame $p
-    .body.side.tabs add $p -text $title
+    $notebook add $p -text $title
     canvas $p.c -background #ffffff -highlightthickness 0 -width 250
     ttk::scrollbar $p.s -orient vertical -command [list $p.c yview]
     $p.c configure -yscrollcommand [list $p.s set]
@@ -281,7 +299,13 @@ proc ::rf::update_controls {} {
         set w $widgets($key)
         set disabled $busy
         set visible 1
-        if {$cfg(plasma.solve_mode)==2 && $key in {plasma.electron_collision plasma.ion_collision plasma.electron_collision_edge_ratio plasma.ion_collision_edge_ratio}} {set disabled 1}
+        set direct_fields {plasma.electron_collision plasma.ion_collision plasma.electron_collision_edge_ratio plasma.ion_collision_edge_ratio}
+        set thermal_fields {plasma.neutral_model plasma.neutral_pressure plasma.gas_temperature plasma.electron_temperature plasma.ion_temperature plasma.neutral_mass_u plasma.electron_neutral_cross_section plasma.ion_neutral_cross_section plasma.coulomb_collisions}
+        if {$cfg(plasma.solve_mode)==2 && ($key in $direct_fields || $key in $thermal_fields || $key eq {plasma.collision_source})} {set disabled 1}
+        if {$key in $direct_fields && $cfg(plasma.collision_source)!=0} {set visible 0}
+        if {$key in $thermal_fields && $cfg(plasma.collision_source)!=1} {set visible 0}
+        if {$key in {plasma.neutral_mass_u plasma.electron_neutral_cross_section plasma.ion_neutral_cross_section} && $cfg(plasma.neutral_model)!=1} {set visible 0}
+        if {$key in {plasma.ion_mass_u plasma.ion_charge} && $cfg(plasma.solve_mode)==0 && $cfg(plasma.collision_source)==1 && $cfg(plasma.neutral_model)==0} {set disabled 1}
         if {$key eq {elements} && $cfg(type) ni {2 3 12 13 15 16 17}} {set visible 0}
         if {$key eq {phase_step} && $cfg(type) ni {2 3 12 13}} {set visible 0}
         if {$key eq {spacing} && $cfg(type) ni {2 3 13 17}} {set visible 0}
@@ -337,6 +361,45 @@ proc ::rf::update_controls {} {
     foreach w {.header.export .header.svg} {
         if {$exportable} {$w state !disabled} else {$w state disabled}
     }
+    set collision_advanced $::rf::fields_by_page(collision).advanced
+    if {$cfg(plasma.collision_source)==0} {grid $collision_advanced} else {grid remove $collision_advanced}
+    if {$::rf::collision_job ne {}} {after cancel $::rf::collision_job}
+    set ::rf::collision_job [after 120 ::rf::update_collision_preview]
+}
+
+# 碰撞信息只读，使用未提交表单预览；输入中间态不弹窗、不改已有计算结果。
+proc ::rf::update_collision_preview {} {
+    set ::rf::collision_job {}
+    if {![winfo exists .body.side.tabs]} {return}
+    if {$::rf::cfg(plasma.solve_mode)==2} {
+        set ::rf::collision_summary {零碰撞极限：碰撞输入不参与计算}
+        set ::rf::collision_detail {使用内部正小量族求零碰撞极限，温度、气压及直接输入的碰撞率均不参与该序列。}
+        return
+    }
+    if {[catch {rf_collisions [array get ::rf::cfg]} rates]} {
+        set ::rf::collision_summary {碰撞率暂不可用 · 查看明细}
+        set ::rf::collision_detail $rates
+        return
+    }
+    set a [dict get $rates axis];set b [dict get $rates edge]
+    set ::rf::collision_summary [format "轴心 νe %.3g，νi %.3g s⁻¹\n边缘 νe %.3g，νi %.3g s⁻¹" [dict get $a nu_e] [dict get $a nu_i] [dict get $b nu_e] [dict get $b nu_i]]
+    set detail {}
+    foreach {key title} {axis 轴心 edge 等离子体边缘} {
+        set d [dict get $rates $key]
+        append detail [format "%s\nνe = %.8g s⁻¹，νi = %.8g s⁻¹\n" $title [dict get $d nu_e] [dict get $d nu_i]]
+        if {$::rf::cfg(plasma.collision_source)==1} {
+            append detail [format "νen = %.8g，νei = %.8g s⁻¹\nνin = %.8g，νie = %.8g s⁻¹\nnn = %.8g m⁻³，lnΛ = %.5g\nKen = %.8g，Kin = %.8g m³/s\n" [dict get $d nu_en] [dict get $d nu_ei] [dict get $d nu_in] [dict get $d nu_ie] [dict get $d nn] [dict get $d ln_lambda] [dict get $d K_en] [dict get $d K_in]]
+        }
+        append detail \n
+    }
+    if {$::rf::cfg(plasma.collision_source)==1} {
+        append detail {温度、气压在本版中均匀；库仑项随电子密度剖面变化。νe、νi为摩擦矩阵对角率，电子离子交换同时含耦合项。氩模型使用弹性电子动量截面及已含电荷交换的离子总动量截面。}
+    }
+    set ::rf::collision_detail $detail
+}
+proc ::rf::show_collisions {} {
+    update_collision_preview
+    tk_messageBox -parent . -title {碰撞率明细} -icon info -message $::rf::collision_detail
 }
 # The catalogue is always visible. The legacy medium flag is derived from
 # the selected view, only for solver dispatch, project compatibility and model preview.
@@ -1285,16 +1348,30 @@ foreach {key title unit} {radius 容器半径 m antenna_radius 天线半径 m an
 ::rf::field $p winding_direction 螺旋绕向 {} {1 -1} {正向 反向}
 ::rf::advanced_toggle $p antenna {高级：相位、位置、采样}
 foreach {key title unit} {global_phase_deg 整体相位 ° azimuth_deg 方位角 ° axial_offset 轴向偏移 m band_samples 带宽采样数 {}} {::rf::field $p $key $title $unit}
-set p [::rf::page medium 介质]
+ttk::frame .body.side.tabs.medium
+.body.side.tabs add .body.side.tabs.medium -text 介质
+ttk::notebook .body.side.tabs.medium.tabs
+pack .body.side.tabs.medium.tabs -fill both -expand 1
+set p [::rf::page medium_background 背景参数 .body.side.tabs.medium.tabs]
 ::rf::group $p {冷等离子体}
 foreach {key title unit} {plasma.radius 等离子体半径 m plasma.density 中心电子密度 m⁻³ plasma.magnetic_field 背景磁场 T} {::rf::field $p $key $title $unit}
 ::rf::field $p plasma.profile 密度分布 {} {0 1 2} {均匀 抛物线 高斯}
 ::rf::field $p plasma.edge_ratio 边缘密度比
-::rf::group $p {碰撞与离子}
+::rf::group $p {离子种类}
+foreach {key title unit} {plasma.ion_mass_u 离子质量 u plasma.ion_charge 离子电荷数 {}} {::rf::field $p $key $title $unit}
+set p [::rf::page collision 碰撞参数 .body.side.tabs.medium.tabs]
 ::rf::field $p plasma.solve_mode 材料响应 {} {0 2} {有限碰撞 零碰撞极限}
-foreach {key title unit} {plasma.electron_collision 电子碰撞频率 s⁻¹ plasma.ion_collision 离子碰撞频率 s⁻¹ plasma.ion_mass_u 离子质量 u plasma.ion_charge 离子电荷数 {}} {::rf::field $p $key $title $unit}
-::rf::advanced_toggle $p medium {高级参数 · 碰撞边缘比例}
+::rf::field $p plasma.collision_source 碰撞率来源 {} {0 1} {直接输入 温度与气压}
+foreach {key title unit} {plasma.electron_collision 电子碰撞频率 s⁻¹ plasma.ion_collision 离子碰撞频率 s⁻¹} {::rf::field $p $key $title $unit}
+::rf::field $p plasma.neutral_model 中性气体模型 {} {0 1} {氩气Ar 自定义截面}
+foreach {key title unit} {plasma.neutral_pressure 中性气压 Pa plasma.electron_temperature 电子温度 eV plasma.gas_temperature 气体温度 K plasma.ion_temperature 离子温度 eV plasma.neutral_mass_u 中性质量 u plasma.electron_neutral_cross_section 电子截面 m² plasma.ion_neutral_cross_section 离子截面 m²} {::rf::field $p $key $title $unit}
+::rf::advanced_toggle $p medium {高级：碰撞边缘比例}
 foreach {key title unit} {plasma.electron_collision_edge_ratio 电子边缘碰撞比 {} plasma.ion_collision_edge_ratio 离子边缘碰撞比 {}} {::rf::field $p $key $title $unit}
+::rf::field $p plasma.coulomb_collisions 电子离子摩擦 {} {1 0} {计入 忽略}
+ttk::label $p.collision_summary -textvariable ::rf::collision_summary -style Sidebar.Subtle.TLabel -font RFSidebar -wraplength 320 -padding {0 5}
+grid $p.collision_summary -column 0 -columnspan 3 -sticky ew
+ttk::button $p.collision_detail -text {碰撞明细} -command ::rf::show_collisions
+grid $p.collision_detail -column 0 -columnspan 2 -sticky w -pady {0 5}
 set p [::rf::page scan 扫描]
 ::rf::group $p {轴向波数扫描}
 foreach {key title unit} {kmin 波数下限 rad/m kmax 波数上限 rad/m nk 波数采样数 {}} {::rf::field $p $key $title $unit}

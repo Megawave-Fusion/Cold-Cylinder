@@ -65,6 +65,16 @@ static const StoredField plasma_fields[] = {
     INT_FIELD(Plasma, ion_charge),
     INT_FIELD(Plasma, profile),
     INT_FIELD(Plasma, solve_mode),
+    INT_FIELD(Plasma, collision_source),
+    INT_FIELD(Plasma, neutral_model),
+    INT_FIELD(Plasma, coulomb_collisions),
+    REAL_FIELD(Plasma, neutral_pressure),
+    REAL_FIELD(Plasma, gas_temperature),
+    REAL_FIELD(Plasma, electron_temperature),
+    REAL_FIELD(Plasma, ion_temperature),
+    REAL_FIELD(Plasma, neutral_mass_u),
+    REAL_FIELD(Plasma, electron_neutral_cross_section),
+    REAL_FIELD(Plasma, ion_neutral_cross_section),
 };
 static const StoredField ray_fields[] = {
     REAL_FIELD(RfRayConfig, r0), REAL_FIELD(RfRayConfig, z0), REAL_FIELD(RfRayConfig, phi0_deg),
@@ -257,12 +267,15 @@ static FILE *open_temporary(const char *path, char temporary[4096], char *error,
 static int finish_save(
     FILE *stream, const char *temporary, const char *path, int written, char *error, size_t size)
 {
+    /* 成功的fclose不保证保留errno；先保存写入错误，避免关闭成功后丢失原因。 */
+    int saved_errno = written ? 0 : errno;
     int closed = fclose(stream) == 0;
+    if (!closed && written)
+        saved_errno = errno;
     if (!written || !closed) {
-        int saved_errno = errno ? errno : EIO;
         rf_remove_utf8(temporary);
         io_fail(error, size, "cannot write file");
-        errno = saved_errno;
+        errno = saved_errno ? saved_errno : EIO;
         return 0;
     }
     if (rf_replace_file_utf8(temporary, path)) {
@@ -461,7 +474,10 @@ static int parse_plasma_lines(const char *text,
     }
     if (require_all) {
         for (size_t i = 0; i < COUNT(plasma_fields); ++i)
-            if (!seen[i] && strcmp(plasma_fields[i].name, "solve_mode")) {
+            /* 温压字段是向后兼容的可选扩展；旧项目继续使用直接输入默认值。
+             * 原有必需字段仍严格检查，不能因扩展而放松损坏文件的检测。 */
+            if (!seen[i] && plasma_fields[i].offset < offsetof(Plasma, collision_source) &&
+                strcmp(plasma_fields[i].name, "solve_mode")) {
                 io_fail(error, size, "plasma configuration is incomplete");
                 goto done;
             }

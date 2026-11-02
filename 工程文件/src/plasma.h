@@ -2,6 +2,7 @@
 #define RF_PLASMA_H
 
 #include "rf_model.h"
+#include "collisions.h"
 #include "vacuum.h"
 
 #include <complex.h>
@@ -11,6 +12,11 @@
 typedef struct RfPlasmaMaterial {
     double ne, ni, nu_e, nu_i;
     double complex S, D, P;
+    RfCollisionRates collisions;
+    /* 温压耦合模型的每单位电场速度；顺序为E+=Er+iEphi、E-=Er-iEphi、Ez。
+     * 用于独立正定摩擦功率核对，单位(m/s)/(V/m)。直接输入路径不使用。 */
+    double complex electron_mobility[3], ion_mobility[3];
+    int coupled_collisions;
 } RfPlasmaMaterial;
 
 /* 固定 (f,m,kz) 的峰值复相量谱场；首次初始化为 {0}，拥有全部数组。 */

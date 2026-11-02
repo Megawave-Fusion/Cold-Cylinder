@@ -69,44 +69,67 @@ int rf_plasma_material(const Project *project,
         return 0;
     if (radius > project->radius + eps)
         return fail(error, error_size, "material radius outside vessel");
+    *m = (RfPlasmaMaterial){0};
     if (radius <= plasma->radius) {
         double shape = profile_factor(plasma, radius);
-        double x = fmin(1., radius / plasma->radius); /* 容差范围内按边界值，避免负碰撞率。 */
         ne = plasma->density * shape;
         ni = ne / (double)plasma->ion_charge;
-        /* 极限请求在局部材料接口中返回正则系数的解析极限。全波场
-         * 则在下方显式构造有限正小量材料；模式 2 不使用输入碰撞率。 */
-        nue = plasma->solve_mode != RF_PLASMA_FINITE_COLLISION
-                  ? 0.0
-                  : plasma->electron_collision *
-                        (1.0 + (plasma->electron_collision_edge_ratio - 1.0) * x * x);
-        nui =
-            plasma->solve_mode != RF_PLASMA_FINITE_COLLISION
-                ? 0.0
-                : plasma->ion_collision * (1.0 + (plasma->ion_collision_edge_ratio - 1.0) * x * x);
+        if (!rf_collision_rates(plasma, radius, ne, &m->collisions, error, error_size))
+            return 0;
+        nue = m->collisions.electron_total;
+        nui = m->collisions.ion_total;
     } else {
         ne = ni = nue = nui = 0.0;
     }
     omega = 2.0 * RF_PI * project->frequency_mhz * 1e6;
-    for (species = 0; species < 2; ++species) {
-        double density = species == 0 ? ne : ni;
-        double charge = species == 0 ? -RF_E_CHARGE : plasma->ion_charge * RF_E_CHARGE;
-        double mass = species == 0 ? RF_ME : plasma->ion_mass_u * RF_AMU;
-        double nu = species == 0 ? nue : nui;
-        double gyro = charge * plasma->magnetic_field / mass;
-        double complex frequency = omega + I * nu;
-        double complex denominator = (frequency - gyro) * (frequency + gyro);
-        double wp2;
-        if (density == 0.0)
-            continue;
-        if ((nu == 0. && fabs(omega - fabs(gyro)) <= 8. * DBL_EPSILON * fmax(omega, fabs(gyro))) ||
-            cabs(denominator) == 0.0 || !isfinite(creal(denominator)) ||
-            !isfinite(cimag(denominator)))
-            return fail(error, error_size, "介电张量在回旋极点无有效有限值");
-        wp2 = density * charge * charge / (RF_EPS0 * mass);
-        S -= wp2 * frequency / (omega * denominator);
-        D += wp2 * gyro / (omega * denominator);
-        P -= wp2 / (omega * frequency);
+    if (plasma->solve_mode == RF_PLASMA_FINITE_COLLISION &&
+        plasma->collision_source == RF_COLLISION_THERMAL && radius <= plasma->radius && ne > 0.) {
+        double mi = plasma->ion_mass_u * RF_AMU;
+        double qe = -RF_E_CHARGE, qi = plasma->ion_charge * RF_E_CHARGE;
+        double oe = qe * plasma->magnetic_field / RF_ME, oi = qi * plasma->magnetic_field / mi;
+        double complex dielectric[3];
+        const int signs[] = {1, -1, 0};
+        for (int c = 0; c < 3; ++c) {
+            /* 动量守恒的物种摩擦矩阵：[[ae,-nu_ei],[-nu_ie,ai]]。
+             * 显式展开行列式，避免纯库仑情况下nu_ei*nu_ie的灾难性相消。
+             * 准中性与动量守恒还使驱动分子的库仑项恰好相消。 */
+            double complex ae0 = m->collisions.electron_neutral - I * (omega - signs[c] * oe);
+            double complex ai0 = m->collisions.ion_neutral - I * (omega - signs[c] * oi);
+            double complex determinant = ae0 * ai0 +
+                m->collisions.electron_ion * ai0 + m->collisions.ion_electron * ae0;
+            if (cabs(determinant) == 0. || !isfinite(creal(determinant)) || !isfinite(cimag(determinant)))
+                return fail(error, error_size, "耦合碰撞材料在此频率无有限响应");
+            m->electron_mobility[c] = qe / RF_ME * ai0 / determinant;
+            m->ion_mobility[c] = qi / mi * ae0 / determinant;
+            double complex conductivity = ne * qe * m->electron_mobility[c] +
+                ni * qi * m->ion_mobility[c];
+            dielectric[c] = 1. + I * conductivity / (RF_EPS0 * omega);
+        }
+        S = .5 * (dielectric[0] + dielectric[1]);
+        D = .5 * (dielectric[1] - dielectric[0]);
+        P = dielectric[2];
+        m->coupled_collisions = 1;
+    } else {
+        for (species = 0; species < 2; ++species) {
+            double density = species == 0 ? ne : ni;
+            double charge = species == 0 ? -RF_E_CHARGE : plasma->ion_charge * RF_E_CHARGE;
+            double mass = species == 0 ? RF_ME : plasma->ion_mass_u * RF_AMU;
+            double nu = species == 0 ? nue : nui;
+            double gyro = charge * plasma->magnetic_field / mass;
+            double complex frequency = omega + I * nu;
+            double complex denominator = (frequency - gyro) * (frequency + gyro);
+            double wp2;
+            if (density == 0.0)
+                continue;
+            if ((nu == 0. && fabs(omega - fabs(gyro)) <= 8. * DBL_EPSILON * fmax(omega, fabs(gyro))) ||
+                cabs(denominator) == 0.0 || !isfinite(creal(denominator)) ||
+                !isfinite(cimag(denominator)))
+                return fail(error, error_size, "介电张量在回旋极点无有效有限值");
+            wp2 = density * charge * charge / (RF_EPS0 * mass);
+            S -= wp2 * frequency / (omega * denominator);
+            D += wp2 * gyro / (omega * denominator);
+            P -= wp2 / (omega * frequency);
+        }
     }
     if (!isfinite(creal(S)) || !isfinite(cimag(S)) || !isfinite(creal(D)) || !isfinite(cimag(D)) ||
         !isfinite(creal(P)) || !isfinite(cimag(P)))
@@ -206,6 +229,21 @@ double rf_plasma_absorption(
 {
     if (!p || !c || !m || !e)
         return NAN;
+    if (m->coupled_collisions) {
+        double complex field[] = {e[0] + I * e[1], e[0] - I * e[1], e[2]};
+        const double weight[] = {.5, .5, 1.};
+        double power = 0., mi = c->ion_mass_u * RF_AMU;
+        for (int j = 0; j < 3; ++j) {
+            double complex ve = m->electron_mobility[j] * field[j];
+            double complex vi = m->ion_mobility[j] * field[j];
+            /* 摩擦的正定耗散：中性背景两项 + 成对交换一项。
+             * 不能对nu_e_total/nu_i_total分别求独立背景耗散，否则重复计数。 */
+            power += .5 * weight[j] * (RF_ME * m->ne * m->collisions.electron_neutral * pow(cabs(ve), 2.) +
+                mi * m->ni * m->collisions.ion_neutral * pow(cabs(vi), 2.) +
+                RF_ME * m->ne * m->collisions.electron_ion * pow(cabs(ve - vi), 2.));
+        }
+        return power;
+    }
     double omega = 2. * RF_PI * p->frequency_mhz * 1e6, q = 0.;
     for (int species = 0; species < 2; ++species) {
         double density = species == 0 ? m->ne : m->ni, nu = species == 0 ? m->nu_e : m->nu_i;
@@ -366,6 +404,7 @@ static int limiting_field(
         double eta = ldexp(1e-2, -level);
         Plasma physical = *reference;
         physical.solve_mode = RF_PLASMA_FINITE_COLLISION;
+        physical.collision_source = RF_COLLISION_DIRECT; /* 数值延拓族独立于温压输入。 */
         physical.electron_collision = physical.ion_collision = eta * omega;
         physical.electron_collision_edge_ratio = physical.ion_collision_edge_ratio = 1.;
         RfMaxwellSolution current = { 0 };

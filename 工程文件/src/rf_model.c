@@ -56,7 +56,7 @@ void project_default(Project *p)
         .current_phase_gradient = 0. };
 }
 
-/* 默认冷电子+单离子材料；碰撞率为独立输入的有效阻尼，不按密度推算。 */
+/* 默认保持直接输入碰撞率；切换温压来源时使用保存的独立物理参数。 */
 void plasma_default(Plasma *p)
 {
     if (p == NULL) {
@@ -73,7 +73,17 @@ void plasma_default(Plasma *p)
         .ion_mass_u = 39.948,
         .ion_charge = 1,
         .profile = RF_PLASMA_PARABOLIC,
-        .solve_mode = RF_PLASMA_FINITE_COLLISION };
+        .solve_mode = RF_PLASMA_FINITE_COLLISION,
+        .collision_source = RF_COLLISION_DIRECT,
+        .neutral_model = RF_NEUTRAL_ARGON,
+        .coulomb_collisions = 1,
+        .neutral_pressure = 0.5,
+        .gas_temperature = 300.,
+        .electron_temperature = 3.,
+        .ion_temperature = 0.03,
+        .neutral_mass_u = 39.948,
+        .electron_neutral_cross_section = 4e-20,
+        .ion_neutral_cross_section = 1e-18 };
 }
 
 /* 仅在外部状态边界迁移旧直接无损选项；保留碰撞输入供切回有限碰撞使用。
@@ -243,6 +253,30 @@ int plasma_validate(const Plasma *p, char *error, size_t error_size)
     }
     if (p->profile == RF_PLASMA_GAUSSIAN && p->edge_ratio == 0.0) {
         return fail(error, error_size, "Gaussian edge_ratio must be greater than zero");
+    }
+    if (p->collision_source < RF_COLLISION_DIRECT || p->collision_source > RF_COLLISION_THERMAL ||
+        p->neutral_model < RF_NEUTRAL_ARGON || p->neutral_model > RF_NEUTRAL_CUSTOM ||
+        p->coulomb_collisions < 0 || p->coulomb_collisions > 1)
+        return fail(error, error_size, "碰撞来源、气体模型或库仑碰撞选项无效");
+    /* 温压参数仅在有限碰撞的温压来源中参与物理校验；零碰撞极限完全独立。 */
+    if (p->solve_mode == RF_PLASMA_FINITE_COLLISION &&
+        p->collision_source == RF_COLLISION_THERMAL) {
+        if (!isfinite(p->neutral_pressure) || p->neutral_pressure < 0. || p->neutral_pressure > 1e6 ||
+            !isfinite(p->gas_temperature) || p->gas_temperature < 1. || p->gas_temperature > 1e5 ||
+            !isfinite(p->electron_temperature) || p->electron_temperature < .001 || p->electron_temperature > 1e3 ||
+            !isfinite(p->ion_temperature) || p->ion_temperature < 1e-5 || p->ion_temperature > 100.)
+            return fail(error, error_size, "温压碰撞参数无效：p≥0 Pa，Tg=1..100000 K，Te=0.001..1000 eV，Ti=0.00001..100 eV");
+        if (p->neutral_model == RF_NEUTRAL_ARGON &&
+            (p->ion_charge != 1 || fabs(p->ion_mass_u - 39.948) > .01 ||
+             p->electron_temperature < .1 || p->electron_temperature > 20. ||
+             p->ion_temperature < .001 || p->ion_temperature > 10. ||
+             p->gas_temperature < 50. || p->gas_temperature > 3000.))
+            return fail(error, error_size, "氩模型要求 Ar+ (39.948 u、Z=1)，Te=0.1..20 eV，Ti=0.001..10 eV，Tg=50..3000 K");
+        if (p->neutral_model == RF_NEUTRAL_CUSTOM &&
+            (!isfinite(p->neutral_mass_u) || p->neutral_mass_u < .1 || p->neutral_mass_u > 300. ||
+             !isfinite(p->electron_neutral_cross_section) || p->electron_neutral_cross_section < 0. || p->electron_neutral_cross_section > 1e-14 ||
+             !isfinite(p->ion_neutral_cross_section) || p->ion_neutral_cross_section < 0. || p->ion_neutral_cross_section > 1e-14))
+            return fail(error, error_size, "自定义模型要求有效中性质量和非负动量转移截面（m²）");
     }
     return 1;
 }
